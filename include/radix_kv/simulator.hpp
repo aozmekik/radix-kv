@@ -44,13 +44,13 @@ struct SimulatorConfig {
 
 /// Counters produced by `simulate()`. All token and block numbers come from the synthetic trace.
 struct SimulationReport {
-  Strategy strategy = Strategy::none;
-  std::uint64_t requests_completed = 0;
-  std::uint64_t requests_rejected = 0;  ///< Larger than the whole pool, with later session turns.
-  std::uint64_t preemptions = 0;        ///< Requests evicted from the running batch (recomputed).
-  std::uint64_t steps = 0;              ///< Scheduler iterations (one decode token per sample).
-  std::uint64_t prompt_tokens = 0;      ///< Prompt tokens looked up at first admission.
-  std::uint64_t cached_tokens = 0;      ///< Of those, tokens served by the prefix cache.
+  Strategy strategy = Strategy::none;    ///< Strategy that produced the report.
+  std::uint64_t requests_completed = 0;  ///< Requests that generated all their output tokens.
+  std::uint64_t requests_rejected = 0;   ///< Larger than the whole pool, with later session turns.
+  std::uint64_t preemptions = 0;         ///< Requests evicted from the running batch (recomputed).
+  std::uint64_t steps = 0;               ///< Scheduler iterations (one decode token per sample).
+  std::uint64_t prompt_tokens = 0;       ///< Prompt tokens looked up at first admission.
+  std::uint64_t cached_tokens = 0;       ///< Of those, tokens served by the prefix cache.
   std::uint64_t recompute_prompt_tokens = 0;  ///< Prompt tokens looked up again after preemption.
   std::uint64_t recompute_cached_tokens = 0;  ///< Of those, tokens served by the prefix cache.
   std::uint64_t decode_tokens = 0;     ///< Tokens generated, including work lost to preemption.

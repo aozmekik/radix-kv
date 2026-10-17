@@ -39,8 +39,11 @@ class LengthDistribution {
   static LengthDistribution lognormal(double median, double sigma, std::uint32_t min,
                                       std::uint32_t max);
 
+  /// Shape of the distribution.
   [[nodiscard]] Kind kind() const noexcept { return kind_; }
+  /// Smallest value the distribution produces.
   [[nodiscard]] std::uint32_t min() const noexcept { return min_; }
+  /// Largest value the distribution produces.
   [[nodiscard]] std::uint32_t max() const noexcept { return max_; }
   /// Median of the log-normal kind; 0 otherwise.
   [[nodiscard]] double median() const noexcept { return median_; }
@@ -67,19 +70,25 @@ class LengthDistribution {
 struct ChatWorkload {
   std::uint32_t sessions = 200;               ///< Number of conversations.
   std::uint32_t system_prompt_tokens = 1024;  ///< Shared by every session; may be 0.
+  /// Turns (requests) per session.
   LengthDistribution turns = LengthDistribution::uniform(2, 6);
+  /// Tokens of each new user message.
   LengthDistribution user_tokens = LengthDistribution::lognormal(64, 0.8, 8, 512);
+  /// Tokens the model generates per turn.
   LengthDistribution output_tokens = LengthDistribution::lognormal(128, 0.7, 8, 1024);
 };
 
 /// Few-shot prompting: a small set of long templates (instructions plus examples), each followed by
 /// a short question. Template popularity follows a Zipf law.
 struct FewShotWorkload {
-  std::uint32_t requests = 1000;
-  std::uint32_t templates = 8;
+  std::uint32_t requests = 1000;  ///< Number of requests.
+  std::uint32_t templates = 8;    ///< Distinct few-shot templates.
+  /// Tokens of each template.
   LengthDistribution template_tokens = LengthDistribution::uniform(1024, 3072);
   double template_zipf = 1.0;  ///< Zipf exponent of template popularity; 0 means uniform.
+  /// Tokens of the question appended to the template.
   LengthDistribution question_tokens = LengthDistribution::uniform(16, 128);
+  /// Tokens the model generates.
   LengthDistribution output_tokens = LengthDistribution::lognormal(48, 0.6, 4, 256);
 };
 
@@ -87,20 +96,25 @@ struct FewShotWorkload {
 /// documents drawn from a Zipf-popular pool (in retrieval order), then the user query. Only the
 /// part of the document list that is identical from the start can be reused as a prefix.
 struct RagWorkload {
-  std::uint32_t requests = 1000;
-  std::uint32_t system_prompt_tokens = 256;  ///< May be 0.
+  std::uint32_t requests = 1000;             ///< Number of requests.
+  std::uint32_t system_prompt_tokens = 256;  ///< Shared by every request; may be 0.
   std::uint32_t documents = 200;             ///< Size of the document pool.
+  /// Tokens of each document.
   LengthDistribution document_tokens = LengthDistribution::uniform(256, 1024);
   std::uint32_t documents_per_query = 3;  ///< Between 1 and `documents`.
   double document_zipf = 1.1;             ///< Zipf exponent of document popularity; 0 = uniform.
+  /// Tokens of the user query after the documents.
   LengthDistribution query_tokens = LengthDistribution::uniform(16, 64);
+  /// Tokens the model generates.
   LengthDistribution output_tokens = LengthDistribution::lognormal(96, 0.6, 8, 512);
 };
 
 /// Independent random prompts: no shared prefixes at all (the control workload).
 struct RandomWorkload {
-  std::uint32_t requests = 1000;
+  std::uint32_t requests = 1000;  ///< Number of requests.
+  /// Tokens of each (random) prompt.
   LengthDistribution prompt_tokens = LengthDistribution::uniform(64, 2048);
+  /// Tokens the model generates.
   LengthDistribution output_tokens = LengthDistribution::uniform(16, 256);
 };
 
