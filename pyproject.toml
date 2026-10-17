@@ -1,0 +1,91 @@
+[build-system]
+requires = ["scikit-build-core>=0.11", "nanobind>=2.9"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "radix-kv"
+dynamic = ["version"]
+description = "KV-cache block manager and prefix caches (chained hashes and radix tree) for LLM serving"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Ahmed Semih Özmekik" }]
+requires-python = ">=3.11"
+keywords = ["llm", "kv-cache", "paged-attention", "radix-tree", "prefix-caching", "inference"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: C++",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://github.com/aozmekik/radix-kv"
+Repository = "https://github.com/aozmekik/radix-kv"
+Issues = "https://github.com/aozmekik/radix-kv/issues"
+Changelog = "https://github.com/aozmekik/radix-kv/blob/main/CHANGELOG.md"
+
+[dependency-groups]
+test = ["pytest>=8.3"]
+# Pinned C++ tools so local runs and CI format and lint identically (see scripts/lint.sh).
+lint = [
+  "clang-format==23.1.3",
+  "clang-tidy==22.1.8",
+  "mypy>=1.13",
+  "nanobind>=2.9",
+  "ruff>=0.8",
+]
+dev = [{ include-group = "test" }, { include-group = "lint" }]
+
+[tool.scikit-build]
+minimum-version = "build-system.requires"
+cmake.version = ">=3.25"
+build-dir = "build/python/{wheel_tag}"
+wheel.packages = ["python/radix_kv"]
+sdist.exclude = [".github", "build", "bench", "fuzz", "docs"]
+
+[tool.scikit-build.cmake.define]
+RADIX_KV_BUILD_PYTHON = "ON"
+RADIX_KV_BUILD_TESTS = "OFF"
+RADIX_KV_BUILD_TOOLS = "OFF"
+RADIX_KV_BUILD_EXAMPLES = "OFF"
+RADIX_KV_INSTALL = "OFF"
+RADIX_KV_WARNINGS_AS_ERRORS = "OFF"
+
+[tool.scikit-build.metadata.version]
+provider = "scikit_build_core.metadata.regex"
+input = "CMakeLists.txt"
+regex = 'VERSION\s+(?P<value>\d+\.\d+\.\d+)'
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests/python"]
+addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
+xfail_strict = true
+filterwarnings = ["error"]
+
+[tool.mypy]
+strict = true
+files = ["tests/python", "examples/python"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["python"]
+
+[tool.ruff.lint]
+select = ["ANN", "B", "C4", "E", "F", "I", "N", "PL", "PT", "RUF", "SIM", "UP", "W"]
+ignore = ["PLR2004"]  # magic values are the point of assertions in tests
+
+[tool.ruff.lint.isort]
+known-first-party = ["radix_kv"]
