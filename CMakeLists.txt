@@ -10,11 +10,17 @@ project(
 option(RADIX_KV_BUILD_TESTS "Build the GoogleTest suite" ${PROJECT_IS_TOP_LEVEL})
 option(RADIX_KV_BUILD_EXAMPLES "Build the C++ examples" ${PROJECT_IS_TOP_LEVEL})
 option(RADIX_KV_BUILD_TOOLS "Build the radix-kv-sim command-line tool" ${PROJECT_IS_TOP_LEVEL})
+option(RADIX_KV_BUILD_BENCHMARKS "Build the Google Benchmark suite" OFF)
+option(RADIX_KV_BUILD_FUZZERS "Build libFuzzer targets (Clang only)" OFF)
+option(RADIX_KV_BUILD_PYTHON "Build the nanobind Python extension" OFF)
 option(RADIX_KV_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" ${PROJECT_IS_TOP_LEVEL})
 option(RADIX_KV_INSTALL "Generate install rules and a CMake package" ${PROJECT_IS_TOP_LEVEL})
 
 if(NOT DEFINED CMAKE_CXX_EXTENSIONS)
   set(CMAKE_CXX_EXTENSIONS OFF)
+endif()
+if(RADIX_KV_BUILD_PYTHON)
+  set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 endif()
 
 include(cmake/CompilerWarnings.cmake)
@@ -66,12 +72,26 @@ if(RADIX_KV_BUILD_TESTS)
   add_subdirectory(tests)
 endif()
 
+if(RADIX_KV_BUILD_BENCHMARKS)
+  include(cmake/Dependencies.cmake)
+  radix_kv_fetch_benchmark()
+  add_subdirectory(bench)
+endif()
+
 if(RADIX_KV_BUILD_TOOLS)
   add_subdirectory(tools)
 endif()
 
 if(RADIX_KV_BUILD_EXAMPLES)
   add_subdirectory(examples/cpp)
+endif()
+
+if(RADIX_KV_BUILD_FUZZERS)
+  add_subdirectory(fuzz)
+endif()
+
+if(RADIX_KV_BUILD_PYTHON)
+  add_subdirectory(python)
 endif()
 
 if(RADIX_KV_INSTALL)

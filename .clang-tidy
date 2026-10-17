@@ -77,4 +77,7 @@ CheckOptions:
     value: true
   - key: readability-implicit-bool-conversion.AllowPointerConditions
     value: true
+  # Umbrella headers of third-party libraries are the documented way to include them.
+  - key: misc-include-cleaner.IgnoreHeaders
+    value: 'benchmark/.*;nanobind/.*;Python\.h;py.*\.h'
 ...
