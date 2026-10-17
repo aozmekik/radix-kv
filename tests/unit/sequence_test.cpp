@@ -29,6 +29,8 @@ TEST(Sequence, AppendAllocatesBlocksAsNeeded) {
   BlockAllocator allocator(8, 4);
   Sequence sequence(allocator);
   EXPECT_TRUE(sequence.empty());
+  EXPECT_EQ(sequence.block_size(), 4U);
+  EXPECT_EQ(&sequence.allocator(), &allocator);
 
   const Result<AppendResult> first = sequence.append(iota_tokens(3));
   ASSERT_TRUE(first);

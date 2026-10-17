@@ -5,6 +5,7 @@ add_executable(
   unit/block_allocator_test.cpp
   unit/hash_prefix_cache_test.cpp
   unit/lru_list_test.cpp
+  unit/null_prefix_cache_test.cpp
   unit/prefix_cache_contract_test.cpp
   unit/property_test.cpp
   unit/radix_prefix_cache_test.cpp

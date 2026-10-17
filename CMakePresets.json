@@ -51,6 +51,16 @@
       }
     },
     {
+      "name": "coverage",
+      "displayName": "Clang source-based coverage (see scripts/coverage.sh)",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_FLAGS": "-fprofile-instr-generate -fcoverage-mapping",
+        "CMAKE_EXE_LINKER_FLAGS": "-fprofile-instr-generate"
+      }
+    },
+    {
       "name": "tsan",
       "displayName": "RelWithDebInfo with ThreadSanitizer",
       "inherits": "base",
@@ -98,6 +108,11 @@
     {
       "name": "tsan",
       "configurePreset": "tsan",
+      "jobs": 4
+    },
+    {
+      "name": "coverage",
+      "configurePreset": "coverage",
       "jobs": 4
     },
     {
