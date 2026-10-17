@@ -4,7 +4,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <format>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -43,7 +42,9 @@ class InvalidHandleError : public RadixKvError {
 };
 
 [[noreturn]] void raise(Errc error) {
-  const std::string message = std::format("{} ({})", describe(error), to_string(error));
+  // Plain concatenation: std::format is unavailable before macOS 13.3, which wheels may target.
+  std::string message(describe(error));
+  message.append(" (").append(to_string(error)).append(")");
   switch (error) {
     case Errc::out_of_blocks:
       throw OutOfBlocksError(message);
@@ -148,7 +149,7 @@ void bind_core(nb::module_& m) {
              return (static_cast<std::uint64_t>(h.index) << 32U) | h.generation;
            })
       .def("__repr__", [](const NodeHandle& h) {
-        return std::format("NodeHandle(index={}, generation={})", h.index, h.generation);
+        return nb::str("NodeHandle(index={}, generation={})").format(h.index, h.generation);
       });
 
   nb::class_<CopyOp>(m, "CopyOp", "Copy-on-write instruction: copy block src into block dst.")
@@ -156,16 +157,19 @@ void bind_core(nb::module_& m) {
       .def_ro("dst", &CopyOp::dst)
       .def(
           "__eq__", [](const CopyOp& a, const CopyOp& b) { return a == b; }, nb::is_operator())
-      .def("__repr__",
-           [](const CopyOp& op) { return std::format("CopyOp(src={}, dst={})", op.src, op.dst); });
+      .def("__repr__", [](const CopyOp& op) {
+        return nb::str("CopyOp(src={}, dst={})").format(op.src, op.dst);
+      });
 
   nb::class_<AppendResult>(m, "AppendResult", "What Sequence.append/extend did.")
       .def_ro("new_blocks", &AppendResult::new_blocks)
       .def_ro("copy", &AppendResult::copy)
       .def("__repr__", [](const AppendResult& r) {
-        return r.copy ? std::format("AppendResult(new_blocks={}, copy=CopyOp(src={}, dst={}))",
-                                    r.new_blocks, r.copy->src, r.copy->dst)
-                      : std::format("AppendResult(new_blocks={}, copy=None)", r.new_blocks);
+        if (const auto& copy = r.copy) {
+          return nb::str("AppendResult(new_blocks={}, copy=CopyOp(src={}, dst={}))")
+              .format(r.new_blocks, copy->src, copy->dst);
+        }
+        return nb::str("AppendResult(new_blocks={}, copy=None)").format(r.new_blocks);
       });
 
   nb::class_<BlockAllocator>(m, "BlockAllocator",
@@ -300,14 +304,14 @@ void bind_workloads(nb::module_& m) {
       .def("__repr__", [](const LengthDistribution& d) {
         switch (d.kind()) {
           case LengthDistribution::Kind::fixed:
-            return std::format("LengthDistribution.fixed({})", d.min());
+            return nb::str("LengthDistribution.fixed({})").format(d.min());
           case LengthDistribution::Kind::uniform:
-            return std::format("LengthDistribution.uniform({}, {})", d.min(), d.max());
+            return nb::str("LengthDistribution.uniform({}, {})").format(d.min(), d.max());
           case LengthDistribution::Kind::lognormal:
-            return std::format("LengthDistribution.lognormal({}, {}, {}, {})", d.median(),
-                               d.sigma(), d.min(), d.max());
+            return nb::str("LengthDistribution.lognormal({}, {}, {}, {})")
+                .format(d.median(), d.sigma(), d.min(), d.max());
         }
-        return std::string("LengthDistribution(?)");
+        return nb::str("LengthDistribution(?)");
       });
 
   const ChatWorkload chat;
@@ -426,8 +430,8 @@ void bind_workloads(nb::module_& m) {
           "__eq__", [](const TraceRequest& a, const TraceRequest& b) { return a == b; },
           nb::is_operator())
       .def("__repr__", [](const TraceRequest& r) {
-        return std::format("TraceRequest(session={}, prompt_tokens={}, output_tokens={})",
-                           r.session, r.prompt_tokens, r.output_tokens);
+        return nb::str("TraceRequest(session={}, prompt_tokens={}, output_tokens={})")
+            .format(r.session, r.prompt_tokens, r.output_tokens);
       });
 
   nb::class_<Trace>(m, "Trace", "Token streams plus the requests that read them.")

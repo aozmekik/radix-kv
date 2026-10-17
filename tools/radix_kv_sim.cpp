@@ -6,11 +6,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
-#include <format>
+#include <iomanip>
 #include <iostream>
 #include <optional>
 #include <ratio>
 #include <span>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -71,7 +72,8 @@ Int parse_number(std::string_view text, std::string_view flag) {
   Int value{};
   const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
   if (error != std::errc{} || end != text.data() + text.size()) {
-    throw UsageError(std::format("{}: expected a non-negative integer, got '{}'", flag, text));
+    throw UsageError(std::string(flag) + ": expected a non-negative integer, got '" +
+                     std::string(text) + "'");
   }
   return value;
 }
@@ -79,7 +81,7 @@ Int parse_number(std::string_view text, std::string_view flag) {
 std::uint32_t parse_positive(std::string_view text, std::string_view flag) {
   const auto value = parse_number<std::uint32_t>(text, flag);
   if (value == 0) {
-    throw UsageError(std::format("{}: must be positive", flag));
+    throw UsageError(std::string(flag) + ": must be positive");
   }
   return value;
 }
@@ -92,7 +94,7 @@ std::vector<std::uint32_t> parse_list(std::string_view text, std::string_view fl
     text = comma == std::string_view::npos ? std::string_view{} : text.substr(comma + 1);
   }
   if (values.empty()) {
-    throw UsageError(std::format("{}: expected at least one value", flag));
+    throw UsageError(std::string(flag) + ": expected at least one value");
   }
   return values;
 }
@@ -106,7 +108,7 @@ std::vector<Strategy> parse_strategies(std::string_view name) {
       return {strategy};
     }
   }
-  throw UsageError(std::format("--strategy: unknown strategy '{}'", name));
+  throw UsageError("--strategy: unknown strategy '" + std::string(name) + "'");
 }
 
 std::vector<std::string> parse_workloads(std::string_view name) {
@@ -116,7 +118,7 @@ std::vector<std::string> parse_workloads(std::string_view name) {
   if (name == "chat" || name == "few-shot" || name == "rag" || name == "random") {
     return {std::string(name)};
   }
-  throw UsageError(std::format("--workload: unknown workload '{}'", name));
+  throw UsageError("--workload: unknown workload '" + std::string(name) + "'");
 }
 
 // Returns std::nullopt when the program should exit successfully (--help, --version).
@@ -133,7 +135,7 @@ std::optional<Options> parse(std::span<char*> args) {
       return std::nullopt;
     }
     if (i + 1 >= args.size()) {
-      throw UsageError(std::format("{}: missing value (see --help)", flag));
+      throw UsageError(std::string(flag) + ": missing value (see --help)");
     }
     const std::string_view value = args[++i];
     if (flag == "--workload") {
@@ -154,11 +156,11 @@ std::optional<Options> parse(std::span<char*> args) {
       options.seed = parse_number<std::uint64_t>(value, flag);
     } else if (flag == "--format") {
       if (value != "markdown" && value != "csv") {
-        throw UsageError(std::format("--format: expected markdown or csv, got '{}'", value));
+        throw UsageError("--format: expected markdown or csv, got '" + std::string(value) + "'");
       }
       options.csv = value == "csv";
     } else {
-      throw UsageError(std::format("unknown option '{}' (see --help)", flag));
+      throw UsageError("unknown option '" + std::string(flag) + "' (see --help)");
     }
   }
   return options;
@@ -185,11 +187,15 @@ Workload make_workload(std::string_view name, std::optional<std::uint32_t> reque
   return random;
 }
 
+// Fixed-point formatting through iostreams: formatting doubles with <format> needs macOS 13.3+.
+std::string fixed(double value, int precision) {
+  std::ostringstream out;
+  out << std::fixed << std::setprecision(precision) << value;
+  return out.str();
+}
+
 std::string format_rate(double per_second) {
-  if (per_second >= 1e6) {
-    return std::format("{:.2f}M", per_second / 1e6);
-  }
-  return std::format("{:.0f}k", per_second / 1e3);
+  return per_second >= 1e6 ? fixed(per_second / 1e6, 2) + "M" : fixed(per_second / 1e3, 0) + "k";
 }
 
 void print_header(bool csv) {
@@ -211,19 +217,21 @@ void print_row(bool csv, std::string_view workload, std::uint32_t blocks,
   const double wall_ms = duration<double, std::milli>(report.wall_time).count();
   const std::string_view strategy = radix_kv::to_string(report.strategy);
   if (csv) {
-    std::cout << std::format("{},{},{},{},{:.6f},{},{},{},{},{},{},{},{},{},{},{:.0f},{:.3f},{}\n",
-                             workload, strategy, blocks, report.requests_completed,
-                             report.hit_rate(), report.prompt_tokens, report.cached_tokens,
-                             report.recompute_prompt_tokens, report.recompute_cached_tokens,
-                             report.evicted_blocks, report.preemptions, report.peak_blocks_used,
-                             report.peak_blocks_active, report.cow_copies, report.cache_ops,
-                             report.cache_ops_per_second(), wall_ms, report.consistent);
+    std::cout << workload << ',' << strategy << ',' << blocks << ',' << report.requests_completed
+              << ',' << fixed(report.hit_rate(), 6) << ',' << report.prompt_tokens << ','
+              << report.cached_tokens << ',' << report.recompute_prompt_tokens << ','
+              << report.recompute_cached_tokens << ',' << report.evicted_blocks << ','
+              << report.preemptions << ',' << report.peak_blocks_used << ','
+              << report.peak_blocks_active << ',' << report.cow_copies << ',' << report.cache_ops
+              << ',' << fixed(report.cache_ops_per_second(), 0) << ',' << fixed(wall_ms, 3) << ','
+              << (report.consistent ? "true" : "false") << '\n';
     return;
   }
-  std::cout << std::format(
-      "| {} | {} | {} | {:.1f}% | {} | {} | {} | {} | {} | {:.1f} |\n", workload, strategy, blocks,
-      100.0 * report.hit_rate(), report.evicted_blocks, report.preemptions, report.peak_blocks_used,
-      report.peak_blocks_active, format_rate(report.cache_ops_per_second()), wall_ms);
+  std::cout << "| " << workload << " | " << strategy << " | " << blocks << " | "
+            << fixed(100.0 * report.hit_rate(), 1) << "% | " << report.evicted_blocks << " | "
+            << report.preemptions << " | " << report.peak_blocks_used << " | "
+            << report.peak_blocks_active << " | " << format_rate(report.cache_ops_per_second())
+            << " | " << fixed(wall_ms, 1) << " |\n";
 }
 
 int run(const Options& options) {
