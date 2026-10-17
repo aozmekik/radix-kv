@@ -24,7 +24,12 @@ add_library(radix_kv)
 add_library(radix_kv::radix_kv ALIAS radix_kv)
 target_sources(
   radix_kv
-  PRIVATE src/block_allocator.cpp src/sequence.cpp
+  PRIVATE src/block_allocator.cpp
+          src/block_token_store.cpp
+          src/hash.cpp
+          src/hash_prefix_cache.cpp
+          src/radix_prefix_cache.cpp
+          src/sequence.cpp
   PUBLIC FILE_SET
          HEADERS
          BASE_DIRS
@@ -32,6 +37,12 @@ target_sources(
          ${PROJECT_BINARY_DIR}/generated/include
          FILES
          include/radix_kv/block_allocator.hpp
+         include/radix_kv/detail/block_token_store.hpp
+         include/radix_kv/detail/lru_list.hpp
+         include/radix_kv/hash_prefix_cache.hpp
+         include/radix_kv/null_prefix_cache.hpp
+         include/radix_kv/prefix_cache.hpp
+         include/radix_kv/radix_prefix_cache.hpp
          include/radix_kv/result.hpp
          include/radix_kv/sequence.hpp
          include/radix_kv/types.hpp
