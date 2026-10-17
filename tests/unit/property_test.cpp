@@ -86,8 +86,8 @@ TEST_P(InvariantSuite, RadixPrefixCache) {
 }
 
 INSTANTIATE_TEST_SUITE_P(Property, InvariantSuite, ::testing::ValuesIn(kVariants),
-                         [](const ::testing::TestParamInfo<Variant>& info) {
-                           return std::string(info.param.name);
+                         [](const ::testing::TestParamInfo<Variant>& param_info) {
+                           return std::string(param_info.param.name);
                          });
 
 TEST(Property, NaiveReferenceModelIsSelfConsistent) {
@@ -120,8 +120,8 @@ TEST_P(DifferentialSuite, StrategiesReturnIdenticalHitsWithoutEviction) {
 }
 
 INSTANTIATE_TEST_SUITE_P(Property, DifferentialSuite, ::testing::Values(1U, 2U, 4U),
-                         [](const ::testing::TestParamInfo<std::uint32_t>& info) {
-                           return "block_size_" + std::to_string(info.param);
+                         [](const ::testing::TestParamInfo<std::uint32_t>& param_info) {
+                           return "block_size_" + std::to_string(param_info.param);
                          });
 
 }  // namespace

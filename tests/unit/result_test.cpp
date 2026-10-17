@@ -4,7 +4,13 @@
 #include <memory>
 #include <set>
 #include <string_view>
+#include <type_traits>
 #include <utility>
+#include <version>  // IWYU pragma: keep (feature-test macros)
+
+#if defined(__cpp_lib_expected) && __cpp_lib_expected >= 202202L
+#include <expected>
+#endif
 
 #include <gtest/gtest.h>
 
@@ -23,6 +29,16 @@ Result<void> require_even(int value) {
     return fail(Errc::invalid_argument);
   }
   return {};
+}
+
+TEST(Result, IsStdExpectedExactlyWhenTheStandardLibraryHasIt) {
+#if defined(__cpp_lib_expected) && __cpp_lib_expected >= 202202L
+  static_assert(std::is_same_v<Result<int>, std::expected<int, Errc>>);
+  EXPECT_EQ(RADIX_KV_STD_EXPECTED, 1);
+#else
+  static_assert(!std::is_same_v<Result<int>, int>);
+  EXPECT_EQ(RADIX_KV_STD_EXPECTED, 0);
+#endif
 }
 
 TEST(Result, HoldsValue) {

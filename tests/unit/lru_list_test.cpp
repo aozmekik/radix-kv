@@ -26,7 +26,12 @@ TEST(LruList, StartsEmpty) {
   EXPECT_EQ(list.front(), LruList::kNil);
   EXPECT_EQ(list.back(), LruList::kNil);
   EXPECT_FALSE(list.contains(0));
-  EXPECT_FALSE(list.contains(99));  // out of range is simply absent
+  // Out of range is simply absent. `volatile` keeps GCC from constant-folding the index into a
+  // (guarded, unreachable) element access and reporting a false -Warray-bounds positive.
+  const volatile std::uint32_t past_the_end = 99;
+  const volatile std::uint32_t nil = LruList::kNil;
+  EXPECT_FALSE(list.contains(past_the_end));
+  EXPECT_FALSE(list.contains(nil));
 }
 
 TEST(LruList, PushBackKeepsInsertionOrder) {

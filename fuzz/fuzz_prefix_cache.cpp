@@ -43,6 +43,9 @@ std::vector<std::size_t> run(const char* name, const DriverOptions& options,
 
 }  // namespace
 
+// libFuzzer entry point (declared here because no libFuzzer header declares it).
+extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size);
+
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
   const std::span<const std::uint8_t> bytes(data, size);
   if (bytes.size() < 2) {
