@@ -68,7 +68,8 @@ class Simulation {
         clock_(&clock),
         allocator_(config.num_blocks, config.block_size),
         cache_(allocator_),
-        next_turn_(trace.requests.size(), kNoRequest) {
+        next_turn_(trace.requests.size(), kNoRequest),
+        admitted_before_(trace.requests.size(), 0) {
     report_.strategy = strategy;
     const std::vector<TraceRequest>& requests = trace.requests;
     for (std::size_t i = 0; i < requests.size(); ++i) {
@@ -145,8 +146,14 @@ class Simulation {
       return false;
     }
     check_ok(sequence.append(prompt.subspan(match.num_tokens)));
-    report_.prompt_tokens += prompt.size();
-    report_.cached_tokens += match.num_tokens;
+    if (admitted_before_[id] == 0) {
+      admitted_before_[id] = 1;
+      report_.prompt_tokens += prompt.size();
+      report_.cached_tokens += match.num_tokens;
+    } else {
+      report_.recompute_prompt_tokens += prompt.size();
+      report_.recompute_cached_tokens += match.num_tokens;
+    }
 
     // Cache the prompt right after prefill so that requests admitted later can share it, and move
     // the lock to the inserted path. When nothing new was cached (a block-aligned prompt whose
@@ -310,6 +317,7 @@ class Simulation {
   BlockAllocator allocator_;  // declared before everything that holds blocks
   Cache cache_;
   std::vector<std::uint32_t> next_turn_;
+  std::vector<std::uint8_t> admitted_before_;  // per request: 1 after its first admission
   std::deque<std::uint32_t> waiting_;
   std::vector<RunningRequest> running_;
   SimulationReport report_;

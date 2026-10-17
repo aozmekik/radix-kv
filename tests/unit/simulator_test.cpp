@@ -67,6 +67,8 @@ void expect_same_counters(const SimulationReport& a, const SimulationReport& b) 
   EXPECT_EQ(a.steps, b.steps);
   EXPECT_EQ(a.prompt_tokens, b.prompt_tokens);
   EXPECT_EQ(a.cached_tokens, b.cached_tokens);
+  EXPECT_EQ(a.recompute_prompt_tokens, b.recompute_prompt_tokens);
+  EXPECT_EQ(a.recompute_cached_tokens, b.recompute_cached_tokens);
   EXPECT_EQ(a.decode_tokens, b.decode_tokens);
   EXPECT_EQ(a.evicted_blocks, b.evicted_blocks);
   EXPECT_EQ(a.cow_copies, b.cow_copies);
@@ -141,12 +143,14 @@ TEST(Simulate, RandomPromptsShareNothing) {
 
 TEST(Simulate, MemoryPressureEvictsAndPreemptsButStaysConsistent) {
   const Trace trace = small_chat();
-  const SimulatorConfig tight{.num_blocks = 48, .block_size = 8, .max_running = 8};
+  const SimulatorConfig tight{.num_blocks = 64, .block_size = 8, .max_running = 8};
   for (const Strategy strategy : kAllStrategies) {
     const SimulationReport report = simulate(trace, strategy, tight);
     EXPECT_TRUE(report.consistent) << to_string(strategy) << ": " << report.inconsistency;
-    EXPECT_EQ(report.requests_completed + report.requests_rejected, trace.requests.size());
+    EXPECT_EQ(report.requests_completed, trace.requests.size());  // the pool fits every request
     EXPECT_GT(report.preemptions, 0U) << to_string(strategy);
+    EXPECT_GT(report.recompute_prompt_tokens, 0U) << to_string(strategy);
+    EXPECT_EQ(report.prompt_tokens, trace.total_prompt_tokens());  // first admissions only
     EXPECT_LE(report.peak_blocks_used, tight.num_blocks);
     if (strategy != Strategy::none) {
       EXPECT_GT(report.evicted_blocks, 0U) << to_string(strategy);

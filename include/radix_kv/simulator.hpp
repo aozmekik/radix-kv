@@ -49,12 +49,14 @@ struct SimulationReport {
   std::uint64_t requests_rejected = 0;  ///< Larger than the whole pool, with later session turns.
   std::uint64_t preemptions = 0;        ///< Requests evicted from the running batch (recomputed).
   std::uint64_t steps = 0;              ///< Scheduler iterations (one decode token per sample).
-  std::uint64_t prompt_tokens = 0;      ///< Prompt tokens looked up at admission.
-  std::uint64_t cached_tokens = 0;      ///< Prompt tokens served by the prefix cache.
-  std::uint64_t decode_tokens = 0;      ///< Tokens generated, including work lost to preemption.
-  std::uint64_t evicted_blocks = 0;     ///< Blocks released by cache eviction.
-  std::uint64_t cow_copies = 0;         ///< Copy-on-write block copies.
-  std::uint32_t peak_blocks_used = 0;   ///< Allocator high-water mark, idle cached blocks included.
+  std::uint64_t prompt_tokens = 0;      ///< Prompt tokens looked up at first admission.
+  std::uint64_t cached_tokens = 0;      ///< Of those, tokens served by the prefix cache.
+  std::uint64_t recompute_prompt_tokens = 0;  ///< Prompt tokens looked up again after preemption.
+  std::uint64_t recompute_cached_tokens = 0;  ///< Of those, tokens served by the prefix cache.
+  std::uint64_t decode_tokens = 0;     ///< Tokens generated, including work lost to preemption.
+  std::uint64_t evicted_blocks = 0;    ///< Blocks released by cache eviction.
+  std::uint64_t cow_copies = 0;        ///< Copy-on-write block copies.
+  std::uint32_t peak_blocks_used = 0;  ///< Allocator high-water mark, idle cached blocks included.
   std::uint32_t peak_blocks_active = 0;  ///< High-water mark of blocks not reclaimable by eviction.
   std::uint64_t cache_ops = 0;           ///< match/insert/lock/unlock/evict calls.
   std::chrono::nanoseconds cache_time{0};  ///< Time spent inside those calls.
@@ -62,7 +64,9 @@ struct SimulationReport {
   bool consistent = false;                 ///< All end-of-run (and per-step) checks passed.
   std::string inconsistency;               ///< First failed check, if any.
 
-  /// Prefix-cache hit rate: `cached_tokens / prompt_tokens` (0 when nothing was looked up).
+  /// Prefix-cache hit rate over first admissions: `cached_tokens / prompt_tokens` (0 when nothing
+  /// was looked up). Re-admissions after preemption are counted separately because they mostly hit
+  /// their own prompt and would make smaller pools look better.
   [[nodiscard]] double hit_rate() const noexcept;
 
   /// Cache operations per second of time spent inside them (0 when no time was measured).

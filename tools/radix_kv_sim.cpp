@@ -195,8 +195,9 @@ std::string format_rate(double per_second) {
 void print_header(bool csv) {
   if (csv) {
     std::cout << "workload,strategy,blocks,requests,hit_rate,prompt_tokens,cached_tokens,"
-                 "evicted_blocks,preemptions,peak_blocks_used,peak_blocks_active,cow_copies,"
-                 "cache_ops,cache_ops_per_s,wall_ms,consistent\n";
+                 "recompute_prompt_tokens,recompute_cached_tokens,evicted_blocks,preemptions,"
+                 "peak_blocks_used,peak_blocks_active,cow_copies,cache_ops,cache_ops_per_s,"
+                 "wall_ms,consistent\n";
     return;
   }
   std::cout << "| workload | strategy | blocks | hit rate | evicted blocks | preemptions | "
@@ -210,9 +211,10 @@ void print_row(bool csv, std::string_view workload, std::uint32_t blocks,
   const double wall_ms = duration<double, std::milli>(report.wall_time).count();
   const std::string_view strategy = radix_kv::to_string(report.strategy);
   if (csv) {
-    std::cout << std::format("{},{},{},{},{:.6f},{},{},{},{},{},{},{},{},{:.0f},{:.3f},{}\n",
+    std::cout << std::format("{},{},{},{},{:.6f},{},{},{},{},{},{},{},{},{},{},{:.0f},{:.3f},{}\n",
                              workload, strategy, blocks, report.requests_completed,
                              report.hit_rate(), report.prompt_tokens, report.cached_tokens,
+                             report.recompute_prompt_tokens, report.recompute_cached_tokens,
                              report.evicted_blocks, report.preemptions, report.peak_blocks_used,
                              report.peak_blocks_active, report.cow_copies, report.cache_ops,
                              report.cache_ops_per_second(), wall_ms, report.consistent);
