@@ -1,0 +1,80 @@
+---
+# Strict by default; every disabled check below has a reason.
+Checks: >
+  -*,
+  bugprone-*,
+  cert-*,
+  clang-analyzer-*,
+  concurrency-*,
+  cppcoreguidelines-*,
+  google-explicit-constructor,
+  google-readability-casting,
+  misc-*,
+  modernize-*,
+  performance-*,
+  portability-*,
+  readability-*,
+  -bugprone-easily-swappable-parameters,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -readability-magic-numbers,
+  -cppcoreguidelines-pro-bounds-constant-array-index,
+  -cppcoreguidelines-pro-bounds-avoid-unchecked-container-access,
+  -modernize-use-trailing-return-type,
+  -readability-identifier-length,
+  -readability-math-missing-parentheses,
+  -portability-avoid-pragma-once,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  -readability-trailing-comma
+# Rationale for the disabled checks:
+#   easily-swappable-parameters: (tokens, blocks) spans are the natural API and are documented.
+#   magic-numbers: hash constants and test data are clearer inline.
+#   pro-bounds-constant-array-index / avoid-unchecked-container-access: indices into the pools are
+#     validated once at the API boundary; per-access bounds checks would sit on the hot path.
+#   use-trailing-return-type: the code base uses leading return types consistently.
+#   identifier-length: i, n and id are idiomatic in loops.
+#   math-missing-parentheses: conflicts with clang-format's spacing of simple expressions.
+#   avoid-pragma-once: every supported compiler implements #pragma once.
+#   pro-bounds-pointer-arithmetic: only used by std::from_chars bounds in the CLI.
+#   trailing-comma: new in clang-tidy 23; flags the comma after `T{}` in `f(T{}, x)` and fights
+#     clang-format's bin-packing of short initializer lists.
+WarningsAsErrors: '*'
+HeaderFilterRegex: '.*/(include/radix_kv|src|tests|tools|examples|bench|fuzz|python/src)/.*'
+FormatStyle: file
+CheckOptions:
+  - key: readability-identifier-naming.NamespaceCase
+    value: lower_case
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.StructCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumConstantCase
+    value: lower_case
+  - key: readability-identifier-naming.FunctionCase
+    value: lower_case
+  - key: readability-identifier-naming.MethodCase
+    value: lower_case
+  - key: readability-identifier-naming.VariableCase
+    value: lower_case
+  - key: readability-identifier-naming.ParameterCase
+    value: lower_case
+  - key: readability-identifier-naming.PrivateMemberSuffix
+    value: _
+  - key: readability-identifier-naming.ProtectedMemberSuffix
+    value: ''
+  - key: readability-identifier-naming.ConstexprVariableCase
+    value: CamelCase
+  - key: readability-identifier-naming.ConstexprVariablePrefix
+    value: k
+  - key: readability-identifier-naming.TemplateParameterCase
+    value: CamelCase
+  - key: readability-function-cognitive-complexity.Threshold
+    value: 30
+  - key: misc-non-private-member-variables-in-classes.IgnoreClassesWithAllMemberVariablesBeingPublic
+    value: true
+  - key: cppcoreguidelines-special-member-functions.AllowSoleDefaultDtor
+    value: true
+  - key: readability-implicit-bool-conversion.AllowPointerConditions
+    value: true
+...

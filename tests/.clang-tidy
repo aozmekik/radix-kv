@@ -1,0 +1,10 @@
+---
+InheritParentConfig: true
+# GoogleTest idioms that the strict library configuration would reject:
+#   cognitive-complexity: every EXPECT_*/ASSERT_* macro expands into branches.
+#   non-private-member-variables: fixtures expose their state to TEST_F bodies by design.
+Checks: >
+  -readability-function-cognitive-complexity,
+  -misc-non-private-member-variables-in-classes,
+  -cppcoreguidelines-non-private-member-variables-in-classes
+...

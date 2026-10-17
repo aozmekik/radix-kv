@@ -1,0 +1,39 @@
+# Build trees (CMake presets write to build/<preset>)
+/build/
+/out/
+/_skbuild/
+/dist/
+/wheelhouse/
+CMakeUserPresets.json
+compile_commands.json
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Coverage and profiling output
+*.profraw
+*.profdata
+*.gcda
+*.gcno
+/coverage/
+default.profraw
+
+# Fuzzing artifacts
+/fuzz/corpus/
+crash-*
+leak-*
+timeout-*
+oom-*
+
+# Editors and OS
+.vscode/
+.idea/
+.cache/
+*.swp
+.DS_Store
