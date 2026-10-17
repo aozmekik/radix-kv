@@ -1,0 +1,8 @@
+foreach(example quickstart compare_strategies)
+  add_executable(radix_kv_example_${example} ${example}.cpp)
+  target_link_libraries(radix_kv_example_${example} PRIVATE radix_kv::radix_kv)
+  radix_kv_set_warnings(radix_kv_example_${example})
+  if(RADIX_KV_BUILD_TESTS)
+    add_test(NAME example.${example} COMMAND radix_kv_example_${example})
+  endif()
+endforeach()

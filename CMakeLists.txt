@@ -8,6 +8,8 @@ project(
   LANGUAGES CXX)
 
 option(RADIX_KV_BUILD_TESTS "Build the GoogleTest suite" ${PROJECT_IS_TOP_LEVEL})
+option(RADIX_KV_BUILD_EXAMPLES "Build the C++ examples" ${PROJECT_IS_TOP_LEVEL})
+option(RADIX_KV_BUILD_TOOLS "Build the radix-kv-sim command-line tool" ${PROJECT_IS_TOP_LEVEL})
 option(RADIX_KV_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" ${PROJECT_IS_TOP_LEVEL})
 option(RADIX_KV_INSTALL "Generate install rules and a CMake package" ${PROJECT_IS_TOP_LEVEL})
 
@@ -30,6 +32,8 @@ target_sources(
           src/hash_prefix_cache.cpp
           src/radix_prefix_cache.cpp
           src/sequence.cpp
+          src/simulator.cpp
+          src/workload.cpp
   PUBLIC FILE_SET
          HEADERS
          BASE_DIRS
@@ -42,10 +46,13 @@ target_sources(
          include/radix_kv/hash_prefix_cache.hpp
          include/radix_kv/null_prefix_cache.hpp
          include/radix_kv/prefix_cache.hpp
+         include/radix_kv/radix_kv.hpp
          include/radix_kv/radix_prefix_cache.hpp
          include/radix_kv/result.hpp
          include/radix_kv/sequence.hpp
+         include/radix_kv/simulator.hpp
          include/radix_kv/types.hpp
+         include/radix_kv/workload.hpp
          ${PROJECT_BINARY_DIR}/generated/include/radix_kv/version.hpp)
 target_compile_features(radix_kv PUBLIC cxx_std_20)
 set_target_properties(radix_kv PROPERTIES VERSION ${PROJECT_VERSION} SOVERSION
@@ -57,6 +64,14 @@ if(RADIX_KV_BUILD_TESTS)
   include(cmake/Dependencies.cmake)
   radix_kv_fetch_googletest()
   add_subdirectory(tests)
+endif()
+
+if(RADIX_KV_BUILD_TOOLS)
+  add_subdirectory(tools)
+endif()
+
+if(RADIX_KV_BUILD_EXAMPLES)
+  add_subdirectory(examples/cpp)
 endif()
 
 if(RADIX_KV_INSTALL)

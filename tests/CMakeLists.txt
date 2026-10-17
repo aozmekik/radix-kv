@@ -9,7 +9,9 @@ add_executable(
   unit/property_test.cpp
   unit/radix_prefix_cache_test.cpp
   unit/result_test.cpp
-  unit/sequence_test.cpp)
+  unit/sequence_test.cpp
+  unit/simulator_test.cpp
+  unit/workload_test.cpp)
 target_include_directories(radix_kv_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(radix_kv_tests PRIVATE radix_kv::radix_kv GTest::gmock_main)
 radix_kv_set_warnings(radix_kv_tests)
