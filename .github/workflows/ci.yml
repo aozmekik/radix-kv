@@ -1,0 +1,148 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint (clang-format, clang-tidy, ruff, mypy)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build
+          python -m pip install --upgrade pip
+          python -m pip install --group lint
+      - name: clang-format and clang-tidy
+        env:
+          CC: clang
+          CXX: clang++
+          RUN_CLANG_TIDY: run-clang-tidy.py
+        run: ./scripts/lint.sh
+      - name: ruff
+        run: |
+          ruff check .
+          ruff format --check .
+
+  cpp:
+    name: C++ ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: "GCC 14, C++20", os: ubuntu-24.04, cc: gcc-14, cxx: g++-14, std: "20" }
+          - { name: "GCC 14, C++23", os: ubuntu-24.04, cc: gcc-14, cxx: g++-14, std: "23" }
+          - { name: "Clang, C++20", os: ubuntu-24.04, cc: clang, cxx: clang++, std: "20" }
+          - { name: "Apple Clang, C++20", os: macos-15, cc: clang, cxx: clang++, std: "20" }
+          - { name: "Apple Clang, C++23", os: macos-15, cc: clang, cxx: clang++, std: "23" }
+    env:
+      CC: ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Ninja (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - name: Install Ninja (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ninja
+      - name: Configure
+        run: cmake --preset release -DCMAKE_CXX_STANDARD=${{ matrix.std }}
+      - name: Build
+        run: cmake --build --preset release
+      - name: Test (unit, property, CLI, examples, benchmark smoke)
+        run: ctest --preset release
+      - name: Install and consume with find_package
+        run: |
+          cmake --install build/release --prefix "$RUNNER_TEMP/prefix"
+          cmake -S tests/package -B "$RUNNER_TEMP/consumer" -G Ninja \
+            -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/prefix" -DCMAKE_CXX_STANDARD=${{ matrix.std }}
+          cmake --build "$RUNNER_TEMP/consumer"
+          "$RUNNER_TEMP/consumer/consumer"
+      - name: Consume with FetchContent
+        run: |
+          cmake -S tests/package -B "$RUNNER_TEMP/consumer-fc" -G Ninja \
+            -DRADIX_KV_SOURCE_DIR="$GITHUB_WORKSPACE" -DCMAKE_CXX_STANDARD=${{ matrix.std }}
+          cmake --build "$RUNNER_TEMP/consumer-fc"
+          "$RUNNER_TEMP/consumer-fc/consumer"
+
+  sanitizers:
+    name: Sanitizers (${{ matrix.preset }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [asan-ubsan, tsan]
+    env:
+      CC: clang-18
+      CXX: clang++-18
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Ninja and the sanitizer runtimes
+        run: sudo apt-get update && sudo apt-get install -y ninja-build libclang-rt-18-dev
+      - name: Reduce ASLR entropy for ThreadSanitizer
+        if: matrix.preset == 'tsan'
+        run: sudo sysctl vm.mmap_rnd_bits=28
+      - name: Configure, build and test
+        run: cmake --workflow --preset ${{ matrix.preset }}
+
+  fuzz:
+    name: Fuzz (libFuzzer, 60 s)
+    runs-on: ubuntu-24.04
+    env:
+      CC: clang-18
+      CXX: clang++-18
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Ninja and the sanitizer runtimes
+        run: sudo apt-get update && sudo apt-get install -y ninja-build libclang-rt-18-dev
+      - name: Build
+        run: |
+          cmake --preset fuzz
+          cmake --build --preset fuzz
+      - name: Fuzz
+        run: |
+          mkdir -p "$RUNNER_TEMP/corpus"
+          ./build/fuzz/fuzz/fuzz_prefix_cache -max_total_time=60 -max_len=4096 "$RUNNER_TEMP/corpus"
+
+  python:
+    name: Python ${{ matrix.python }} (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+        python: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Build and install the package with test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install . --group test "mypy>=1.13"
+      - name: pytest
+        run: python -m pytest
+      - name: mypy --strict
+        run: python -m mypy
+      - name: Examples
+        run: |
+          python examples/python/quickstart.py
+          python examples/python/compare_strategies.py
