@@ -221,7 +221,7 @@ class Simulation {
     return true;
   }
 
-  // Recompute-style preemption: free everything and queue the request again at the front.
+  // Restart preemption: free everything and queue the request again at the front.
   void preempt(std::size_t index) {
     RunningRequest victim = std::move(running_[index]);
     running_.erase(running_.begin() + static_cast<std::ptrdiff_t>(index));

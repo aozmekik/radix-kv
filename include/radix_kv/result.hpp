@@ -34,7 +34,7 @@ enum class Errc : std::uint8_t {
   invalid_block,        ///< A block id is outside the pool.
   block_not_allocated,  ///< The block is free (reference count zero), e.g. a double release.
   ref_count_overflow,   ///< A reference or lock count would exceed its 32-bit range.
-  invalid_handle,       ///< A node handle is stale (its node was evicted) or was never issued.
+  invalid_handle,       ///< A node handle is stale (its node was evicted) or not a live node.
   not_locked,           ///< `unlock()` on a node that holds no lock taken through that handle.
   invalid_argument,     ///< A documented precondition on the arguments does not hold.
 };
@@ -72,7 +72,7 @@ enum class Errc : std::uint8_t {
     case Errc::ref_count_overflow:
       return "reference or lock count overflow";
     case Errc::invalid_handle:
-      return "node handle is stale or was never issued by this cache";
+      return "node handle is stale or not a live node of this cache";
     case Errc::not_locked:
       return "node is not locked through this handle";
     case Errc::invalid_argument:

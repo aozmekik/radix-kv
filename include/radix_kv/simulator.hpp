@@ -47,7 +47,7 @@ struct SimulationReport {
   Strategy strategy = Strategy::none;    ///< Strategy that produced the report.
   std::uint64_t requests_completed = 0;  ///< Requests that generated all their output tokens.
   std::uint64_t requests_rejected = 0;   ///< Larger than the whole pool, with later session turns.
-  std::uint64_t preemptions = 0;         ///< Requests evicted from the running batch (recomputed).
+  std::uint64_t preemptions = 0;         ///< Requests evicted from the running batch (restarted).
   std::uint64_t steps = 0;               ///< Scheduler iterations (one decode token per sample).
   std::uint64_t prompt_tokens = 0;       ///< Prompt tokens looked up at first admission.
   std::uint64_t cached_tokens = 0;       ///< Of those, tokens served by the prefix cache.
@@ -85,7 +85,10 @@ using Clock = std::function<std::chrono::nanoseconds()>;
 /// Per step the scheduler admits waiting requests first-come first-served while fewer than
 /// `max_running` run and their prompt fits (evicting from the cache when needed), then every
 /// running sample decodes one token. A request that cannot get a block preempts the most recently
-/// admitted request, which is re-queued at the front and recomputed later. The last prompt token
+/// admitted request, which restarts later: its sequences are released (their decode blocks are not
+/// cached), and once re-admitted at the front of the queue it prefills its prompt again (using the
+/// cache) and decodes its output from the first token. vLLM's recompute preemption instead keeps
+/// the generated tokens and prefills prompt and output in one pass. The last prompt token
 /// is never served from the cache (the engine needs its logits). Prompt blocks are inserted into
 /// the cache right after prefill, the full sequence when the request finishes; requests lock the
 /// cached path they use. Turn `k + 1` of a session (its next request in `trace.requests`) is

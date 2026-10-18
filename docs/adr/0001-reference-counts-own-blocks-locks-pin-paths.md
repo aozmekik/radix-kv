@@ -48,8 +48,9 @@ took.
 - The allocator stays small and strategy-agnostic, and both caches satisfy one `PrefixCache`
   concept, so the simulator runs identical scheduler code over them.
 - Idle cached blocks are not "free": a scheduler must call `evict()` when allocation fails. The
-  real headroom is `num_free() + stats().evictable_blocks`. vLLM folds this into allocation; here
-  it is an explicit call.
+  real headroom is at most `num_free() + stats().evictable_blocks`: an unlocked cached block that
+  a sequence still holds is evictable, but evicting it frees nothing. vLLM folds this into
+  allocation; here it is an explicit call.
 - Each cached block costs one extra reference-count increment and decrement over its lifetime.
 - Invariants are easy to state and test: every block's reference count equals the number of
   sequences holding it plus one if a cache holds it (checked after every step of the property
