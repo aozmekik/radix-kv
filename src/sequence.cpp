@@ -2,8 +2,10 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <span>
 #include <utility>
+#include <vector>
 
 #include "radix_kv/block_allocator.hpp"
 #include "radix_kv/result.hpp"
@@ -12,6 +14,19 @@
 #include "check.hpp"
 
 namespace radix_kv {
+
+namespace {
+
+// True when `view` points into the elements of `storage`. std::less is a total order over all
+// pointers, unlike the built-in comparison of pointers into different arrays.
+bool points_into(std::span<const TokenId> view, const std::vector<TokenId>& storage) noexcept {
+  const std::less<const TokenId*> before;
+  const TokenId* const first = storage.data();
+  const TokenId* const last = first + storage.size();
+  return !view.empty() && !before(view.data(), first) && before(view.data(), last);
+}
+
+}  // namespace
 
 Sequence::Sequence(Sequence&& other) noexcept
     : allocator_(other.allocator_),
@@ -36,6 +51,12 @@ Result<AppendResult> Sequence::append(std::span<const TokenId> tokens) {
   AppendResult result;
   if (tokens.empty()) {
     return result;
+  }
+  if (points_into(tokens, tokens_)) {
+    // `tokens` views this sequence's own tokens (`seq.append(seq.tokens())`). Growing `tokens_`
+    // would leave it dangling, and inserting a vector's own range into it is undefined anyway.
+    const std::vector<TokenId> copy(tokens.begin(), tokens.end());
+    return append(std::span<const TokenId>(copy));
   }
   const std::size_t block_size = allocator_->block_size();
   const std::size_t used_in_last = tokens_.size() % block_size;

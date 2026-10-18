@@ -50,7 +50,8 @@ class Sequence {
   /// Releases every block.
   ~Sequence();
 
-  /// Appends `tokens`, allocating blocks as needed.
+  /// Appends `tokens`, allocating blocks as needed. `tokens` may view this sequence's own tokens
+  /// (for example `seq.append(seq.tokens())`); such input is copied first.
   /// @return what changed, or `Errc::out_of_blocks` with nothing changed.
   /// @throws std::bad_alloc if the token or block vectors cannot grow (nothing changes).
   [[nodiscard]] Result<AppendResult> append(std::span<const TokenId> tokens);

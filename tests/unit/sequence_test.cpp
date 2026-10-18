@@ -78,6 +78,28 @@ TEST(Sequence, FailedAppendLeavesEverythingUnchanged) {
   EXPECT_EQ(allocator.num_free(), 0U);
 }
 
+TEST(Sequence, AppendOfItsOwnTokensCopiesThemFirst) {
+  BlockAllocator allocator(8, 4);
+  Sequence sequence(allocator);
+  ASSERT_TRUE(sequence.append(iota_tokens(3)));
+  // Grows the token vector while the argument views it (a use-after-free before the fix).
+  ASSERT_TRUE(sequence.append(sequence.tokens()));
+  EXPECT_THAT(sequence.tokens(), ElementsAre(0, 1, 2, 0, 1, 2));
+  ASSERT_TRUE(sequence.append(sequence.tokens().last(2)));
+  EXPECT_THAT(sequence.tokens(), ElementsAre(0, 1, 2, 0, 1, 2, 1, 2));
+  EXPECT_EQ(sequence.num_blocks(), 2U);
+
+  // Fill the pool by doubling, then check that a failing self-append changes nothing.
+  ASSERT_TRUE(sequence.append(sequence.tokens()));  // 16 tokens
+  ASSERT_TRUE(sequence.append(sequence.tokens()));  // 32 tokens: every block of the pool
+  EXPECT_EQ(allocator.num_free(), 0U);
+  const std::vector<TokenId> full(sequence.tokens().begin(), sequence.tokens().end());
+  const Result<AppendResult> overflow = sequence.append(sequence.tokens());
+  ASSERT_FALSE(overflow);
+  EXPECT_EQ(overflow.error(), Errc::out_of_blocks);
+  EXPECT_THAT(sequence.tokens(), ElementsAreArray(full));
+}
+
 TEST(Sequence, ForkSharesEveryBlock) {
   BlockAllocator allocator(8, 4);
   Sequence parent(allocator);
