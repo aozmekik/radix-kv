@@ -2,7 +2,6 @@
 
 #include "radix_kv/hash_prefix_cache.hpp"
 
-#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <span>
