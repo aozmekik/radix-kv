@@ -5,14 +5,17 @@
 
 #include <string_view>
 
-// Macros so that consumers can test the version in #if.
+// Macros so that consumers can test the version in #if. clang-format would turn `@VAR@` into
+// `@VAR @`, which configure_file() no longer substitutes, so it must not touch these lines.
 // NOLINTBEGIN(cppcoreguidelines-macro-usage,cppcoreguidelines-macro-to-enum,modernize-macro-to-enum)
+// clang-format off
 /// Major version.
-#define RADIX_KV_VERSION_MAJOR @PROJECT_VERSION_MAJOR @
+#define RADIX_KV_VERSION_MAJOR @PROJECT_VERSION_MAJOR@
 /// Minor version.
-#define RADIX_KV_VERSION_MINOR @PROJECT_VERSION_MINOR @
+#define RADIX_KV_VERSION_MINOR @PROJECT_VERSION_MINOR@
 /// Patch version.
-#define RADIX_KV_VERSION_PATCH @PROJECT_VERSION_PATCH @
+#define RADIX_KV_VERSION_PATCH @PROJECT_VERSION_PATCH@
+// clang-format on
 // NOLINTEND(cppcoreguidelines-macro-usage,cppcoreguidelines-macro-to-enum,modernize-macro-to-enum)
 
 namespace radix_kv {
