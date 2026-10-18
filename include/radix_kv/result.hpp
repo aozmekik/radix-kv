@@ -250,4 +250,21 @@ class Result<void> {
   return Unexpected(error);
 }
 
+namespace detail {
+
+// `Result` is a different type in C++20 and C++23 mode, so code compiled in one mode must not link
+// against a library compiled in the other: that would be an ODR violation that miscompiles
+// silently. The library defines only the function of its own mode, and every translation unit that
+// includes this header references the function of its mode, so a mismatch fails to link with an
+// undefined reference that names the mode the code expected.
+#if RADIX_KV_STD_EXPECTED
+int built_with_std_expected_result() noexcept;
+inline const int result_mode_check = built_with_std_expected_result();
+#else
+int built_with_fallback_result() noexcept;
+inline const int result_mode_check = built_with_fallback_result();
+#endif
+
+}  // namespace detail
+
 }  // namespace radix_kv

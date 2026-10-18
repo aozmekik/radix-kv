@@ -40,3 +40,8 @@ Exceptions remain for programming errors outside the hot path: constructors thro
   either exception.
 - Monadic operations (`and_then`, `transform`) are only available in C++23 mode and are therefore
   not used by the library.
+- `Result` is a different type in the two modes, so the library and the code using it must be
+  compiled in the same mode; otherwise functions returning `Result` would be called with the wrong
+  layout. `result.hpp` turns such a mix into a link error: every translation unit references
+  `radix_kv::detail::built_with_std_expected_result()` or `built_with_fallback_result()`, and the
+  library defines only the one of its own mode. The check costs one trivial static initializer.

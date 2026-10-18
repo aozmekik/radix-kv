@@ -37,6 +37,7 @@ target_sources(
           src/hash.cpp
           src/hash_prefix_cache.cpp
           src/radix_prefix_cache.cpp
+          src/result.cpp
           src/sequence.cpp
           src/simulator.cpp
           src/workload.cpp
