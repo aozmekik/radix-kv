@@ -132,11 +132,12 @@ struct TraceRequest {
 
 /// A generated workload: token streams plus the requests that read them.
 ///
-/// Requests of one session are consecutive and in turn order; the simulator releases turn `k + 1`
-/// only after turn `k` finished, the way a chat client waits for the answer.
+/// The requests of one session appear in turn order (`generate_trace()` also keeps them
+/// consecutive); the simulator releases turn `k + 1` only after turn `k` finished, the way a chat
+/// client waits for the answer.
 struct Trace {
   std::vector<std::vector<TokenId>> sessions;  ///< Token stream of each session.
-  std::vector<TraceRequest> requests;          ///< Grouped by session, in turn order.
+  std::vector<TraceRequest> requests;          ///< Each session's requests in turn order.
   std::uint32_t vocab_size = 0;                ///< Token ids are in `[0, vocab_size)`.
 
   /// Prompt tokens of `request`. Precondition: `request` belongs to this trace.

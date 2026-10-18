@@ -71,14 +71,17 @@ class Simulation {
         next_turn_(trace.requests.size(), kNoRequest),
         admitted_before_(trace.requests.size(), 0) {
     report_.strategy = strategy;
-    const std::vector<TraceRequest>& requests = trace.requests;
-    for (std::size_t i = 0; i < requests.size(); ++i) {
-      const bool same_session_as_previous = i > 0 && requests[i - 1].session == requests[i].session;
-      if (same_session_as_previous) {
-        next_turn_[i - 1] = static_cast<std::uint32_t>(i);
+    // Chain every request to the next request of its session; the first turn of each session
+    // waits from the start. Sessions may interleave in the trace.
+    std::vector<std::uint32_t> last_turn(trace.sessions.size(), kNoRequest);
+    for (std::uint32_t i = 0; i < trace.requests.size(); ++i) {
+      std::uint32_t& last = last_turn[trace.requests[i].session];
+      if (last == kNoRequest) {
+        waiting_.push_back(i);
       } else {
-        waiting_.push_back(static_cast<std::uint32_t>(i));
+        next_turn_[last] = i;
       }
+      last = i;
     }
   }
 
@@ -260,7 +263,8 @@ class Simulation {
     }
   }
 
-  // A request larger than the pool can never run; later turns of its session only grow.
+  // A request larger than the pool can never run, and the later turns of its session continue a
+  // conversation that never happened: reject them too.
   void reject_session(std::uint32_t id) {
     for (std::uint32_t request = id; request != kNoRequest; request = next_turn_[request]) {
       ++report_.requests_rejected;

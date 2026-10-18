@@ -168,6 +168,32 @@ TEST(Simulate, RequestsLargerThanThePoolAreRejectedWithTheirSession) {
   EXPECT_EQ(report.prompt_tokens, 0U);
 }
 
+TEST(Simulate, TurnsOfASessionRunInOrderWhenSessionsInterleave) {
+  // Session 0 has two turns; session 1's only request sits between them in the trace.
+  Trace trace;
+  trace.vocab_size = 64;
+  trace.sessions = {std::vector<TokenId>(20), std::vector<TokenId>(12)};
+  for (std::size_t i = 0; i < 20; ++i) {
+    trace.sessions[0][i] = static_cast<TokenId>(i);
+  }
+  for (std::size_t i = 0; i < 12; ++i) {
+    trace.sessions[1][i] = static_cast<TokenId>(32 + i);
+  }
+  trace.requests = {TraceRequest{.session = 0, .prompt_tokens = 8, .output_tokens = 4},
+                    TraceRequest{.session = 1, .prompt_tokens = 8, .output_tokens = 4},
+                    TraceRequest{.session = 0, .prompt_tokens = 16, .output_tokens = 4}};
+  const SimulatorConfig config{.num_blocks = 64, .block_size = 4, .max_running = 8};
+  for (const Strategy strategy : kAllStrategies) {
+    const SimulationReport report = simulate(trace, strategy, config);
+    EXPECT_TRUE(report.consistent) << report.inconsistency;
+    EXPECT_EQ(report.requests_completed, 3U);
+    // The first turns run together for 4 steps; the second turn of session 0 starts only then.
+    EXPECT_EQ(report.steps, 8U) << to_string(strategy);
+  }
+  // Session 0's second turn re-sends its first prompt and answer: two blocks are cached.
+  EXPECT_EQ(simulate(trace, Strategy::radix, config).cached_tokens, 12U);
+}
+
 TEST(Simulate, ParallelSamplesShareThePromptAndCopyOnWrite) {
   const Trace trace = small_few_shot();
   const SimulatorConfig sampled{.samples_per_request = 4};

@@ -88,7 +88,8 @@ using Clock = std::function<std::chrono::nanoseconds()>;
 /// admitted request, which is re-queued at the front and recomputed later. The last prompt token
 /// is never served from the cache (the engine needs its logits). Prompt blocks are inserted into
 /// the cache right after prefill, the full sequence when the request finishes; requests lock the
-/// cached path they use. Turn `k + 1` of a chat session is queued when turn `k` finishes.
+/// cached path they use. Turn `k + 1` of a session (its next request in `trace.requests`) is
+/// queued when turn `k` finishes, also when other sessions' requests sit between them.
 ///
 /// After the run every block must be back in the pool once the cache is drained;
 /// `SimulationReport::consistent` reports this and the other end-of-run checks.
