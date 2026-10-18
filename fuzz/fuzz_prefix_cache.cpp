@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "radix_kv/hash_prefix_cache.hpp"
+#include "radix_kv/prefix_cache.hpp"
 #include "radix_kv/radix_prefix_cache.hpp"
 
 #include "support/op_driver.hpp"
@@ -24,10 +25,11 @@ using radix_kv::test_support::NaivePrefixCache;
 using radix_kv::test_support::OpDriver;
 
 [[noreturn]] void report(const char* cache, const std::string& problem) {
-  std::fputs(cache, stderr);
-  std::fputs(": ", stderr);
-  std::fputs(problem.c_str(), stderr);
-  std::fputs("\n", stderr);
+  // Best effort: the process aborts right after, whether or not the message got out.
+  static_cast<void>(std::fputs(cache, stderr));
+  static_cast<void>(std::fputs(": ", stderr));
+  static_cast<void>(std::fputs(problem.c_str(), stderr));
+  static_cast<void>(std::fputs("\n", stderr));
   std::abort();
 }
 
@@ -43,7 +45,8 @@ std::vector<std::size_t> run(const char* name, const DriverOptions& options,
 
 }  // namespace
 
-// libFuzzer entry point (declared here because no libFuzzer header declares it).
+// libFuzzer entry point (declared here because no libFuzzer header declares it); its name is fixed.
+// NOLINTBEGIN(readability-identifier-naming)
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size);
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
@@ -74,3 +77,4 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
   }
   return 0;
 }
+// NOLINTEND(readability-identifier-naming)

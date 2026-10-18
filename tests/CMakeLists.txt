@@ -21,6 +21,23 @@ radix_kv_set_warnings(radix_kv_tests)
 # PRE_TEST discovery lists the tests when ctest runs, so cross-compiled or sanitizer builds work.
 gtest_discover_tests(radix_kv_tests DISCOVERY_MODE PRE_TEST)
 
+# The libFuzzer harness driven by a plain main(), so that every compiler builds and runs it (the
+# real fuzzer needs a Clang with libFuzzer; see fuzz/CMakeLists.txt).
+add_executable(radix_kv_fuzz_replay ${PROJECT_SOURCE_DIR}/fuzz/fuzz_prefix_cache.cpp
+                                    support/fuzz_replay_main.cpp)
+target_include_directories(radix_kv_fuzz_replay PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(radix_kv_fuzz_replay PRIVATE radix_kv::radix_kv)
+radix_kv_set_warnings(radix_kv_fuzz_replay)
+add_test(NAME fuzz.prefix_cache.replay COMMAND radix_kv_fuzz_replay)
+
+# The find_package / FetchContent consumer of CI, also built in-tree so that it is compiled, linted
+# and run with every configuration.
+add_executable(radix_kv_consumer package/main.cpp)
+target_link_libraries(radix_kv_consumer PRIVATE radix_kv::radix_kv)
+radix_kv_set_warnings(radix_kv_consumer)
+add_test(NAME package.consumer COMMAND radix_kv_consumer)
+set_tests_properties(package.consumer PROPERTIES PASS_REGULAR_EXPRESSION ": ok")
+
 # Allocation-failure tests replace the global operator new, which would bypass the sanitizers'
 # own allocators, so they are built only without -fsanitize.
 if(NOT CMAKE_CXX_FLAGS MATCHES "-fsanitize")

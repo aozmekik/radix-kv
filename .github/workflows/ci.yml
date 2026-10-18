@@ -117,6 +117,9 @@ jobs:
           cmake --preset fuzz
           cmake --build --preset fuzz
       - name: Fuzz
+        env:
+          ASAN_OPTIONS: abort_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
         run: |
           mkdir -p "$RUNNER_TEMP/corpus"
           ./build/fuzz/fuzz/fuzz_prefix_cache -max_total_time=60 -max_len=4096 "$RUNNER_TEMP/corpus"

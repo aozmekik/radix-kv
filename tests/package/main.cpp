@@ -1,5 +1,6 @@
 // Minimal consumer: exits 0 when the package works end to end.
 
+#include <exception>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -11,7 +12,9 @@
 #error "this consumer expects radix-kv 0.1 or a later 0.x release"
 #endif
 
-int main() {
+namespace {
+
+int run() {
   const std::string macro_version = std::to_string(RADIX_KV_VERSION_MAJOR) + "." +
                                     std::to_string(RADIX_KV_VERSION_MINOR) + "." +
                                     std::to_string(RADIX_KV_VERSION_PATCH);
@@ -30,4 +33,15 @@ int main() {
   const bool hit = cache.match_prefix(tokens).num_tokens == 4;
   std::cout << "radix-kv " << radix_kv::kVersion << (hit ? ": ok\n" : ": unexpected miss\n");
   return hit ? 0 : 1;
+}
+
+}  // namespace
+
+int main() {
+  try {
+    return run();
+  } catch (const std::exception& error) {
+    std::cout << "error: " << error.what() << '\n';
+    return 1;
+  }
 }

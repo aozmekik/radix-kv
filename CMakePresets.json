@@ -72,15 +72,16 @@
     },
     {
       "name": "fuzz",
-      "displayName": "libFuzzer targets (set CXX to a Clang with libFuzzer)",
+      "displayName": "libFuzzer targets with asserts on (set CXX to a Clang with libFuzzer)",
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_CXX_FLAGS_RELWITHDEBINFO": "-O2 -g",
         "RADIX_KV_BUILD_FUZZERS": "ON",
         "RADIX_KV_BUILD_TESTS": "OFF",
         "RADIX_KV_BUILD_TOOLS": "OFF",
         "RADIX_KV_BUILD_EXAMPLES": "OFF",
-        "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined,fuzzer-no-link -fno-omit-frame-pointer"
+        "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined,fuzzer-no-link -fno-sanitize-recover=all -fno-omit-frame-pointer"
       }
     }
   ],
