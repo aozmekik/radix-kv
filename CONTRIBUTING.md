@@ -1,0 +1,79 @@
+# Contributing
+
+Thanks for taking a look. Issues and pull requests are welcome; for larger changes please open an
+issue first so the design can be discussed (see the ADRs in [docs/adr](docs/adr)).
+
+## Requirements
+
+- CMake 3.25 or newer and Ninja
+- A C++20 compiler. CI builds with GCC 14 and Clang 18 on Ubuntu 24.04 and Apple Clang on macOS 15
+- Python 3.11 to 3.14 for the bindings
+- For linting: `pip install --group lint` installs the pinned clang-format, clang-tidy, ruff and mypy
+
+## Build and test (C++)
+
+```sh
+cmake --workflow --preset dev          # Debug: configure, build, run every test
+cmake --workflow --preset release      # Release, including a benchmark smoke run
+cmake --workflow --preset cxx23        # C++23 mode (Result is std::expected)
+cmake --workflow --preset asan-ubsan   # AddressSanitizer + UndefinedBehaviorSanitizer
+cmake --workflow --preset tsan         # ThreadSanitizer
+```
+
+The presets write to `build/<preset>` and use 4 parallel jobs. Run a subset of the GoogleTest
+suite with `ctest --preset dev -R Property` or `./build/dev/tests/radix_kv_tests --gtest_filter=...`.
+
+## Python package
+
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install . --group dev   # builds the extension with scikit-build-core
+.venv/bin/python -m pytest
+.venv/bin/python -m mypy                        # strict, over tests/python and examples/python
+```
+
+## Lint and format
+
+```sh
+PATH="$PWD/.venv/bin:$PATH" RUN_CLANG_TIDY=run-clang-tidy.py PYTHON=.venv/bin/python ./scripts/lint.sh
+.venv/bin/ruff check . && .venv/bin/ruff format --check .
+.venv/bin/clang-format -i $(git ls-files '*.cpp' '*.hpp')   # apply the C++ style
+```
+
+`scripts/lint.sh` checks formatting and runs clang-tidy, with warnings as errors, over the library,
+tests, tools, examples, benchmarks, fuzzer and bindings. Every disabled check is justified in
+[.clang-tidy](.clang-tidy). The configuration is clean with the pinned PyPI tools (clang-format
+23.1.3, clang-tidy 22.1.8) and with a Homebrew LLVM 23 toolchain:
+
+```sh
+LLVM=/opt/homebrew/opt/llvm/bin
+CLANG_FORMAT=$LLVM/clang-format CLANG_TIDY=$LLVM/clang-tidy RUN_CLANG_TIDY=$LLVM/run-clang-tidy \
+  PYTHON=.venv/bin/python BUILD_DIR=build/lint-llvm ./scripts/lint.sh
+```
+
+## Benchmarks, fuzzing and coverage
+
+```sh
+cmake --workflow --preset release
+./build/release/bench/radix_kv_bench --benchmark_repetitions=5 --benchmark_report_aggregates_only=true
+./build/release/tools/radix-kv-sim --blocks 1024,4096,16384
+
+CXX=/path/to/clang++ cmake --preset fuzz && cmake --build --preset fuzz   # needs libFuzzer
+./build/fuzz/fuzz/fuzz_prefix_cache -max_total_time=60 -max_len=4096
+
+./scripts/coverage.sh   # Clang source-based coverage of src/ and include/
+```
+
+Apple Clang does not ship libFuzzer; Homebrew LLVM or Clang on Linux does.
+
+## Conventions
+
+- C++: leading return types, `snake_case` functions and variables, `CamelCase` types,
+  `trailing_underscore_` members, `kConstants`. Public items carry `///` doc comments.
+- Fallible operations return `Result<T>`; nothing on a hot path throws.
+- Every behavioural change comes with tests; invariant-heavy code should also be covered by the
+  randomized driver in `tests/support/op_driver.hpp`.
+- Numbers quoted in the README must come from a command you ran; state the command, hardware and
+  toolchain next to them.
+- Commits follow [Conventional Commits](https://www.conventionalcommits.org/).
