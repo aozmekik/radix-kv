@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   lint:
-    name: Lint (clang-format, clang-tidy, ruff, mypy)
+    name: Lint (clang-format, clang-tidy, ruff)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -48,7 +48,7 @@ jobs:
         include:
           - { name: "GCC 14, C++20", os: ubuntu-24.04, cc: gcc-14, cxx: g++-14, std: "20" }
           - { name: "GCC 14, C++23", os: ubuntu-24.04, cc: gcc-14, cxx: g++-14, std: "23" }
-          - { name: "Clang, C++20", os: ubuntu-24.04, cc: clang, cxx: clang++, std: "20" }
+          - { name: "Clang 18, C++20", os: ubuntu-24.04, cc: clang-18, cxx: clang++-18, std: "20" }
           - { name: "Apple Clang, C++20", os: macos-15, cc: clang, cxx: clang++, std: "20" }
           - { name: "Apple Clang, C++23", os: macos-15, cc: clang, cxx: clang++, std: "23" }
     env:
