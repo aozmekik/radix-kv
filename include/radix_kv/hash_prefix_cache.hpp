@@ -51,6 +51,7 @@ class HashPrefixCache {
   ~HashPrefixCache();
 
   /// Longest cached prefix of `tokens` made of whole blocks; marks it most recently used.
+  /// @throws std::bad_alloc if the result cannot be allocated; nothing changes then.
   [[nodiscard]] PrefixMatch match_prefix(std::span<const TokenId> tokens);
 
   /// Caches the `tokens.size() / block_size` full blocks of `blocks` (block `i` holds tokens
@@ -59,6 +60,8 @@ class HashPrefixCache {
   /// @return `Errc::invalid_argument` if `blocks` is too short, a block to cache is already cached
   ///         elsewhere or appears twice; `Errc::invalid_block` / `Errc::block_not_allocated` for
   ///         bad block ids. Nothing changes on error.
+  /// @throws std::bad_alloc if the hash index cannot grow; the entries added so far are rolled
+  ///         back, so nothing changes.
   [[nodiscard]] Result<InsertResult> insert(std::span<const TokenId> tokens,
                                             std::span<const BlockId> blocks);
 

@@ -63,9 +63,11 @@ using BlockHasher = std::uint64_t (*)(std::uint64_t seed, std::span<const TokenI
 ///
 /// Contract, identical for every implementation:
 /// - `match_prefix(tokens)` returns the longest cached prefix made of whole blocks and marks it
-///   recently used. It takes no references and no locks.
+///   recently used. It takes no references and no locks. (The radix tree may split a node, which
+///   changes the tree's shape but not what is cached.)
 /// - `insert(tokens, blocks)` caches the `tokens.size() / block_size` full blocks of `blocks`,
-///   taking one allocator reference per newly cached block. It either succeeds or changes nothing.
+///   taking one allocator reference per newly cached block. It either succeeds or changes nothing,
+///   also when it throws `std::bad_alloc`.
 /// - `lock(node)` pins the path from the root to `node`; locked blocks are never evicted.
 ///   `unlock(node)` undoes exactly one `lock(node)` taken through the same handle.
 /// - `evict(n)` releases least-recently-used unlocked leaves until at least `n` blocks were

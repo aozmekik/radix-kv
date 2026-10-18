@@ -134,7 +134,20 @@ Result<InsertResult> HashPrefixCache::insert(std::span<const TokenId> tokens,
       ++added;
     }
   } catch (...) {
-    touch_path(parent);  // keep the blocks cached so far evictable, then report the failure
+    // Undo phase 2, deepest entry first, so that a failed insert changes nothing. The new entries
+    // are not in the LRU order yet and no handle to them was issued.
+    for (; added > 0; --added) {
+      Entry& entry = entries_[parent];
+      const std::uint32_t above = entry.parent;
+      index_.erase(entry.hash);
+      --entries_[above].children;
+      store_.erase(entry.block);
+      detail::expect_ok(allocator_->release(entry.block));
+      entry.live = false;
+      entry.parent = kNone;
+      entry.block = kInvalidBlock;
+      parent = above;
+    }
     throw;
   }
   touch_path(parent);

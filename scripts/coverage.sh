@@ -22,6 +22,7 @@ mkdir -p "$PROFILE_DIR"
 LLVM_PROFILE_FILE="$(pwd)/$PROFILE_DIR/%p-%m.profraw" \
   ctest --test-dir "$BUILD_DIR" -j 4 --output-on-failure > /dev/null
 $LLVM_PROFDATA merge -sparse "$PROFILE_DIR"/*.profraw -o "$BUILD_DIR/radix_kv.profdata"
-$LLVM_COV report "$BUILD_DIR/tests/radix_kv_tests" -instr-profile="$BUILD_DIR/radix_kv.profdata" \
+$LLVM_COV report "$BUILD_DIR/tests/radix_kv_tests" -object "$BUILD_DIR/tests/radix_kv_fault_tests" \
+  -instr-profile="$BUILD_DIR/radix_kv.profdata" \
   -ignore-filename-regex='(_deps|tests|tools|examples|bench|fuzz|generated)/' \
   "$(pwd)/src" "$(pwd)/include"

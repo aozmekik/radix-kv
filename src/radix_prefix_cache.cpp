@@ -100,12 +100,20 @@ Result<InsertResult> RadixPrefixCache::insert(std::span<const TokenId> tokens,
   }
 
   std::uint32_t node = plan.parent;
-  if (plan.split_child != kNone) {
+  const bool splits = plan.split_child != kNone;
+  if (splits) {
     node = split(plan.split_child, plan.split_at);
   }
   std::size_t added = 0;
   if (!plan.blocked && plan.next < full_blocks) {
-    node = add_leaf(node, tokens, to_cache, plan.next);
+    try {
+      node = add_leaf(node, tokens, to_cache, plan.next);
+    } catch (...) {
+      if (splits) {
+        unsplit(node);  // a failed insert changes nothing, not even the tree's shape
+      }
+      throw;
+    }
     added = full_blocks - plan.next;
   }
   touch(node);
@@ -291,6 +299,22 @@ std::uint32_t RadixPrefixCache::split(std::uint32_t node, std::size_t prefix_blo
     lru_.insert_after(node, upper);  // same recency, and still in front of the old parent
   }
   return upper;
+}
+
+void RadixPrefixCache::unsplit(std::uint32_t upper) noexcept {
+  Node& top = nodes_[upper];
+  assert(top.children.size() == 1 && top.direct_locks == 0);
+  const std::uint32_t lower = top.children.begin()->second;
+  Node& bottom = nodes_[lower];
+  // No reallocation: erasing the front of the edge in split() kept its capacity.
+  bottom.blocks.insert(bottom.blocks.begin(), top.blocks.begin(), top.blocks.end());
+  bottom.key = top.key;
+  bottom.parent = top.parent;
+  nodes_[top.parent].children.find(top.key)->second = lower;
+  if (lru_.contains(upper)) {
+    lru_.remove(upper);
+  }
+  free_node(upper);
 }
 
 std::uint32_t RadixPrefixCache::add_leaf(std::uint32_t parent, std::span<const TokenId> tokens,

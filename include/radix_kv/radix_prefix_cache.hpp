@@ -51,7 +51,9 @@ class RadixPrefixCache {
   ~RadixPrefixCache();
 
   /// Longest cached prefix of `tokens` made of whole blocks. Splits the last node when the match
-  /// ends inside it and marks the path most recently used.
+  /// ends inside it (the tree's shape changes, what is cached does not) and marks the path most
+  /// recently used.
+  /// @throws std::bad_alloc if a split cannot allocate its node; the tree is unchanged then.
   [[nodiscard]] PrefixMatch match_prefix(std::span<const TokenId> tokens);
 
   /// Caches the `tokens.size() / block_size` full blocks of `blocks`, taking a reference to each
@@ -59,6 +61,8 @@ class RadixPrefixCache {
   /// @return `Errc::invalid_argument` if `blocks` is too short, a block to cache is already cached
   ///         elsewhere or appears twice; `Errc::invalid_block` / `Errc::block_not_allocated` for
   ///         bad block ids. Nothing changes on error.
+  /// @throws std::bad_alloc if a node cannot be allocated; a split made for the insert is undone,
+  ///         so nothing changes.
   [[nodiscard]] Result<InsertResult> insert(std::span<const TokenId> tokens,
                                             std::span<const BlockId> blocks);
 
@@ -133,6 +137,7 @@ class RadixPrefixCache {
   std::uint32_t new_node();
   void free_node(std::uint32_t node) noexcept;
   std::uint32_t split(std::uint32_t node, std::size_t prefix_blocks);
+  void unsplit(std::uint32_t upper) noexcept;
   std::uint32_t add_leaf(std::uint32_t parent, std::span<const TokenId> tokens,
                          std::span<const BlockId> blocks, std::size_t first);
   void touch(std::uint32_t node) noexcept;
