@@ -95,6 +95,21 @@ def test_insert_rejects_a_sequence_of_another_allocator(cache_type: CacheType) -
     assert cache.match_prefix([1, 2, 3, 4]).num_tokens == 0
 
 
+def test_result_types_have_readable_reprs() -> None:
+    pool = rk.BlockAllocator(8, 2)
+    cache = rk.RadixPrefixCache(pool)
+    seq = cached_sequence(pool, cache, [1, 2, 3, 4])
+    inserted = cache.insert(seq)
+    assert repr(inserted) == f"InsertResult(new_blocks=0, node={inserted.node!r})"
+    match = cache.match_prefix([1, 2, 3])
+    block = seq.block_table[0]
+    assert repr(match) == f"PrefixMatch(num_tokens=2, blocks=[{block}], node={match.node!r})"
+    assert repr(cache.stats) == (
+        "CacheStats(cached_blocks=2, locked_blocks=0, evictable_blocks=2, nodes=2, "
+        "evicted_blocks=0)"
+    )
+
+
 def test_strategies_agree_on_block_aligned_prefixes() -> None:
     prompts = [[1, 2, 3, 4, 5, 6], [1, 2, 3, 4, 7, 8], [1, 2, 9, 9], [5, 5, 5]]
     lengths: dict[str, list[int]] = {}

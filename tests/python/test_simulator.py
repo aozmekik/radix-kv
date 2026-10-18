@@ -105,6 +105,8 @@ def test_turns_of_interleaved_sessions_run_in_order() -> None:
     report = rk.simulate(trace, rk.Strategy.hash, rk.SimulatorConfig(num_blocks=64, block_size=4))
     # Session 0's second turn waits for its first: 4 steps, then 4 more.
     assert (report.requests_completed, report.steps, report.consistent) == (3, 8, True)
+    assert repr(report).startswith("SimulationReport(strategy=hash, requests_completed=3, ")
+    assert repr(report).endswith("preemptions=0, consistent=True)")
 
 
 def test_simulations_run_in_parallel_threads() -> None:

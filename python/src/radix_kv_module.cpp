@@ -266,18 +266,33 @@ void bind_core(nb::module_& m) {
   nb::class_<PrefixMatch>(m, "PrefixMatch", "Longest cached block-aligned prefix of a query.")
       .def_ro("num_tokens", &PrefixMatch::num_tokens)
       .def_ro("blocks", &PrefixMatch::blocks)
-      .def_ro("node", &PrefixMatch::node);
+      .def_ro("node", &PrefixMatch::node)
+      .def("__repr__", [](const PrefixMatch& match) {
+        return nb::str("PrefixMatch(num_tokens={}, blocks={}, node={!r})")
+            .format(match.num_tokens, match.blocks, match.node);
+      });
 
-  nb::class_<InsertResult>(m, "InsertResult")
+  nb::class_<InsertResult>(m, "InsertResult", "What a prefix cache's insert() cached.")
       .def_ro("new_blocks", &InsertResult::new_blocks)
-      .def_ro("node", &InsertResult::node);
+      .def_ro("node", &InsertResult::node)
+      .def("__repr__", [](const InsertResult& result) {
+        return nb::str("InsertResult(new_blocks={}, node={!r})")
+            .format(result.new_blocks, result.node);
+      });
 
   nb::class_<CacheStats>(m, "CacheStats", "Point-in-time counters of a prefix cache.")
       .def_ro("cached_blocks", &CacheStats::cached_blocks)
       .def_ro("locked_blocks", &CacheStats::locked_blocks)
       .def_ro("evictable_blocks", &CacheStats::evictable_blocks)
       .def_ro("nodes", &CacheStats::nodes)
-      .def_ro("evicted_blocks", &CacheStats::evicted_blocks);
+      .def_ro("evicted_blocks", &CacheStats::evicted_blocks)
+      .def("__repr__", [](const CacheStats& stats) {
+        return nb::str(
+                   "CacheStats(cached_blocks={}, locked_blocks={}, evictable_blocks={}, "
+                   "nodes={}, evicted_blocks={})")
+            .format(stats.cached_blocks, stats.locked_blocks, stats.evictable_blocks, stats.nodes,
+                    stats.evicted_blocks);
+      });
 
   bind_cache<HashPrefixCache>(
       m, "HashPrefixCache",
@@ -539,7 +554,14 @@ void bind_simulator(nb::module_& m) {
       .def_prop_ro("cache_seconds",
                    [](const SimulationReport& r) { return Seconds(r.cache_time).count(); })
       .def_prop_ro("wall_seconds",
-                   [](const SimulationReport& r) { return Seconds(r.wall_time).count(); });
+                   [](const SimulationReport& r) { return Seconds(r.wall_time).count(); })
+      .def("__repr__", [](const SimulationReport& r) {
+        return nb::str(
+                   "SimulationReport(strategy={}, requests_completed={}, requests_rejected={}, "
+                   "hit_rate={:.4f}, evicted_blocks={}, preemptions={}, consistent={})")
+            .format(std::string(to_string(r.strategy)), r.requests_completed, r.requests_rejected,
+                    r.hit_rate(), r.evicted_blocks, r.preemptions, r.consistent);
+      });
 
   m.def(
       "simulate",
