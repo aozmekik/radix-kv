@@ -96,6 +96,17 @@ def test_custom_traces_are_validated() -> None:
         rk.simulate(broken, rk.Strategy.hash)
 
 
+def test_turns_of_interleaved_sessions_run_in_order() -> None:
+    trace = rk.Trace(
+        sessions=[list(range(20)), list(range(32, 44))],
+        requests=[rk.TraceRequest(0, 8, 4), rk.TraceRequest(1, 8, 4), rk.TraceRequest(0, 16, 4)],
+        vocab_size=64,
+    )
+    report = rk.simulate(trace, rk.Strategy.hash, rk.SimulatorConfig(num_blocks=64, block_size=4))
+    # Session 0's second turn waits for its first: 4 steps, then 4 more.
+    assert (report.requests_completed, report.steps, report.consistent) == (3, 8, True)
+
+
 def test_simulations_run_in_parallel_threads() -> None:
     trace = small_few_shot()
     config = rk.SimulatorConfig(num_blocks=128, block_size=8)
