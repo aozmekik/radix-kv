@@ -57,7 +57,8 @@ compiler is needed; pip fetches CMake and Ninja if they are missing):
 pip install "git+https://github.com/aozmekik/radix-kv"
 ```
 
-The CI workflow builds and tests the package on Python 3.11 to 3.14, on Linux and macOS.
+The CI workflow is configured to build and test the package on Python 3.11 to 3.14, on Linux and
+macOS.
 
 ### C++ with CMake
 
@@ -66,49 +67,68 @@ include(FetchContent)
 FetchContent_Declare(
   radix_kv
   GIT_REPOSITORY https://github.com/aozmekik/radix-kv
-  GIT_TAG main)  # or a commit SHA
+  GIT_TAG v0.1.0)  # or a commit SHA
 FetchContent_MakeAvailable(radix_kv)
 
 target_link_libraries(your_target PRIVATE radix_kv::radix_kv)
 ```
 
-As a subproject it builds only the library: no tests, tools or `-Werror`. To install it instead:
+As a subproject it builds only the library: no tests, tools or `-Werror`. To install it instead
+(the library, headers, CMake package, the `radix-kv-sim` tool and the license):
 
 ```sh
-cmake --preset release && cmake --build --preset release
-cmake --install build/release --prefix /your/prefix   # then find_package(radix_kv CONFIG REQUIRED)
+cmake -S . -B build/install -DCMAKE_BUILD_TYPE=Release -DRADIX_KV_BUILD_TESTS=OFF \
+  -DRADIX_KV_BUILD_EXAMPLES=OFF
+cmake --build build/install
+cmake --install build/install --prefix /your/prefix   # then find_package(radix_kv CONFIG REQUIRED)
 ```
 
-The install also provides the `radix-kv-sim` command-line tool.
+Compile your code in the same C++ mode as the library: `Result` is `std::expected` in C++23 and a
+fallback class in C++20, and a mix of the two fails to link
+([ADR 0003](docs/adr/0003-result-type-with-std-expected-fallback.md)).
 
 ## Quick start
 
 C++ ([full example](examples/cpp/quickstart.cpp)):
 
 ```cpp
+#include <span>
+
 #include "radix_kv/radix_kv.hpp"
 
-radix_kv::BlockAllocator pool(/*num_blocks=*/1024, /*block_size=*/16);
-radix_kv::RadixPrefixCache cache(pool);
+namespace rk = radix_kv;
 
-// A new request: reuse the cached prefix (the last prompt token is always recomputed).
-const radix_kv::PrefixMatch hit = cache.match_prefix(prompt.first(prompt.size() - 1));
-if (!cache.lock(hit.node)) { /* stale handle */ }
-radix_kv::Sequence seq(pool);
-if (!seq.assign_prefix(prompt.first(hit.num_tokens), hit.blocks)) { /* ... */ }
-if (auto appended = seq.append(prompt.subspan(hit.num_tokens)); !appended) {
-  cache.evict(/*num_blocks=*/64);  // appended.error() == radix_kv::Errc::out_of_blocks
+// Prefills one request, reusing the cached prefix of its prompt, and decodes a token on a fork.
+rk::Result<void> run_request(rk::BlockAllocator& pool, rk::RadixPrefixCache& cache,
+                             std::span<const rk::TokenId> prompt, rk::TokenId next_token) {
+  // The last prompt token is always recomputed: the engine needs its logits.
+  const rk::PrefixMatch hit = cache.match_prefix(prompt.first(prompt.size() - 1));
+  if (auto locked = cache.lock(hit.node); !locked) {  // pin the shared blocks while in use
+    return locked;
+  }
+  rk::Sequence seq(pool);
+  auto ready = seq.assign_prefix(prompt.first(hit.num_tokens), hit.blocks);
+  auto appended = seq.append(prompt.subspan(hit.num_tokens));
+  if (!appended && appended.error() == rk::Errc::out_of_blocks) {
+    cache.evict(pool.blocks_for(prompt.size()));  // drop unlocked cached blocks, then retry
+    appended = seq.append(prompt.subspan(hit.num_tokens));
+  }
+  if (!ready || !appended) {
+    static_cast<void>(cache.unlock(hit.node));
+    return rk::fail(!ready ? ready.error() : appended.error());  // e.g. queue the request
+  }
+
+  // Parallel sampling: a fork shares every block until one of them writes.
+  if (auto sample = seq.fork()) {
+    if (auto step = sample->append(next_token); step && step->copy) {
+      // The engine copies the KV data of block step->copy->src into step->copy->dst.
+    }
+  }
+
+  // Done: cache the full blocks and drop the lock; `seq` releases its references.
+  static_cast<void>(cache.insert(seq.tokens(), seq.block_table()));
+  return cache.unlock(hit.node);
 }
-
-// Parallel sampling: forks share every block until one of them writes.
-auto sample = seq.fork();
-if (auto step = sample->append(next_token); step && step->copy) {
-  // The engine copies the KV data of block step->copy->src into step->copy->dst.
-}
-
-// Done: cache the full blocks, release the lock and the sequence's references.
-static_cast<void>(cache.insert(seq.tokens(), seq.block_table()));
-static_cast<void>(cache.unlock(hit.node));
 ```
 
 Python ([full example](examples/python/quickstart.py)):
@@ -118,12 +138,16 @@ import radix_kv as rk
 
 pool = rk.BlockAllocator(num_blocks=1024, block_size=16)
 cache = rk.RadixPrefixCache(pool)
+prompt = list(range(100))  # token ids from your tokenizer
 
-hit = cache.match_prefix(prompt[:-1])
+hit = cache.match_prefix(prompt[:-1])  # the last prompt token is always recomputed
 cache.lock(hit.node)
 seq = rk.Sequence(pool)
 seq.assign_prefix(prompt[: hit.num_tokens], hit.blocks)
 seq.extend(prompt[hit.num_tokens :])  # raises rk.OutOfBlocksError when full
+seq.append(7)  # one decode step
+cache.insert(seq)  # cache the full blocks, then release the lock
+cache.unlock(hit.node)
 
 trace = rk.generate_trace(rk.ChatWorkload(sessions=100), seed=1)
 for strategy in (rk.Strategy.none, rk.Strategy.hash, rk.Strategy.radix):
@@ -144,15 +168,17 @@ radix-kv-sim --workload rag --samples 4 --format csv                 # parallel 
 |---|---|
 | `BlockAllocator` | Pool of reference-counted blocks: `allocate`, `retain`, `release`, `ref_count`, `num_free` |
 | `Sequence` | Tokens and block table: `append`, `fork`, `truncate`, `release`, `assign_prefix` |
-| `HashPrefixCache`, `RadixPrefixCache` | `match_prefix`, `insert`, `lock`, `unlock`, `evict`, `stats`, `check_invariants` |
+| `HashPrefixCache`, `RadixPrefixCache` | `match_prefix`, `insert`, `lock`, `unlock`, `evict`, `stats`, `allocator`, `check_invariants` |
 | `NullPrefixCache` | Caches nothing; the no-caching baseline |
 | `PrefixCache` (concept) | The interface shared by the three caches |
 | `Result<T>`, `Errc` | Value-or-error results; `to_string(Errc)` and `describe(Errc)` |
 | `generate_trace`, `Trace` | Synthetic workloads, or your own token streams |
 | `simulate`, `SimulatorConfig`, `SimulationReport` | Scheduler simulation over a trace |
 
-Every public item has a doc comment in [include/radix_kv](include/radix_kv); the Python API mirrors
-it (see the shipped `_core.pyi` stubs).
+Every public item has a doc comment in [include/radix_kv](include/radix_kv). The Python API covers
+the allocator, sequences, both caches, the workloads and the simulator, with errors raised as
+exceptions (see the shipped `_core.pyi` stubs); `NullPrefixCache`, the batch `allocate` and `Errc`
+are C++ only.
 
 ## How it works
 
@@ -213,13 +239,22 @@ in eviction granularity (one block versus a whole leaf).
 - **One LRU order for both caches.** Paths are marked used deepest node first, so children always
   precede parents and the eviction victim is always a leaf; the radix tree evicts whole leaves as
   SGLang does ([ADR 0004](docs/adr/0004-shared-lru-order-and-whole-leaf-eviction.md)).
-- **Strong guarantee.** Mutations either succeed or change nothing (`insert` validates every block
-  before touching the cache); handles carry a generation, so a stale handle is rejected instead of
-  aliasing a newer node.
+- **Strong guarantee.** A mutation that returns an error or throws `std::bad_alloc` changes
+  nothing: `insert` validates every block before touching the cache and rolls back when an
+  allocation fails. A fault-injection test fails each allocation of `insert`, `match_prefix`,
+  `fork`, `assign_prefix` and `append` in turn and checks that nothing changed. A radix-tree
+  `match_prefix` may split a node, which changes the tree's shape but not what is cached.
+- **Generation-checked handles.** A stale handle is rejected instead of aliasing a newer node.
+  Handles do not record which cache issued them, so use each with its own cache.
+- **One C++ mode per program.** `Result` differs between C++20 and C++23, so `result.hpp` makes a
+  mix of the two a link error instead of a silent ODR violation
+  ([ADR 0003](docs/adr/0003-result-type-with-std-expected-fallback.md)).
 - **Scheduler policy (simulator).** First-come first-served admission, one decode token per running
-  sample per step, prompt cached right after prefill so later requests can share it, recompute
-  preemption of the most recently admitted request, and the last prompt token always recomputed
-  because the engine needs its logits.
+  sample per step, prompt cached right after prefill so later requests can share it, and the last
+  prompt token always recomputed because the engine needs its logits. Preemption restarts the most
+  recently admitted request: its decode blocks are released without being cached and it decodes
+  its output again from the first token. vLLM's recompute preemption keeps the generated tokens and
+  re-prefills prompt and output in one pass, so this costs slightly more decode work.
 - **Deterministic traces.** The generator uses its own xoshiro256** PRNG and integer sampling, not
   the implementation-defined `<random>` distributions; a golden-fingerprint test pins the output of
   an integer-only trace on every platform.
@@ -240,7 +275,8 @@ at most 32 running requests. The hit rate counts first admissions only; recomput
 preemption is reported separately. Hit rates, evictions and preemptions do not depend on timing
 and repeat exactly on the same platform; the default workloads draw log-normal lengths and Zipf
 popularity through `<cmath>`, so another C library may produce slightly different traces. Run on
-an Apple M1 Pro (8 cores), 16 GB, macOS 26, Apple Clang 21.0.0, Release build.
+an Apple M1 Pro (8 cores), 16 GB, macOS 26, Apple Clang 21.0.0, Release build. No request was
+rejected at these pool sizes (the tool's `rejected` column).
 
 | Workload | Pool (blocks) | Hit rate hash | Hit rate radix | Evicted blocks hash | Evicted blocks radix | Preemptions |
 |---|--:|--:|--:|--:|--:|--:|
@@ -269,17 +305,19 @@ What the numbers show:
 - Sharing prefix blocks among running requests shrinks their working set by up to 70% here
   (few-shot), on top of the compute saved by the hits.
 
-Cache cost at 4096 blocks, median of three runs of
-`./build/release/tools/radix-kv-sim --blocks 4096 --format csv` on the same machine. Every call is
-timed with `steady_clock`, so timer overhead is included, and the machine was heavily loaded by
-other jobs (1-minute load average 22 to 27), so treat these as rough:
+Cache cost at 4096 blocks: median of five runs of
+`./build/release/tools/radix-kv-sim --blocks 4096 --format csv` (columns `cache_ops` and
+`cache_ms`) on the same machine. Every call is timed with `steady_clock`, so timer overhead is
+included, and these are wall-clock times taken while other jobs were running (1-minute load average
+about 11 to 12 on 8 cores), so treat them as rough. The call counts are exact and were the same in
+every run.
 
 | Workload | Cache calls hash | Cache calls radix | Time in cache hash | Time in cache radix | Calls/s hash | Calls/s radix |
 |---|--:|--:|--:|--:|--:|--:|
-| chat (767 requests) | 11,349 | 6,144 | 11.2 ms | 2.4 ms | 1.01M | 2.52M |
-| few-shot (1000) | 9,665 | 7,978 | 14.5 ms | 2.7 ms | 0.67M | 3.01M |
-| rag (1000) | 14,967 | 7,966 | 21.2 ms | 3.6 ms | 0.71M | 2.19M |
-| random (1000) | 16,230 | 7,886 | 12.4 ms | 2.1 ms | 1.31M | 3.79M |
+| chat (767 requests) | 11,349 | 6,144 | 11.3 ms | 2.4 ms | 1.01M | 2.57M |
+| few-shot (1000) | 9,665 | 7,978 | 14.8 ms | 3.1 ms | 0.65M | 2.54M |
+| rag (1000) | 14,967 | 7,966 | 21.9 ms | 4.2 ms | 0.68M | 1.90M |
+| random (1000) | 16,230 | 7,886 | 12.3 ms | 1.9 ms | 1.32M | 4.09M |
 
 The two strategies do not receive the same calls: the hash cache evicts exactly the number of
 blocks asked for, so the scheduler calls `evict()` again for nearly every new block once the pool
@@ -297,50 +335,65 @@ cmake --workflow --preset release
 ```
 
 Apple M1 Pro (8 cores), 16 GB, macOS 26, Apple Clang 21.0.0, Release (`-O3`), Google Benchmark
-1.10.0. Wall-time medians of 5 repetitions. Other jobs were running on the machine (1-minute load
-average about 27 before and after the run), so treat the numbers as indicative: the coefficient of variation was
-below 6% for every row except the radix-tree simulation (12%). All inputs are synthetic.
+1.10.0. CPU-time medians of 5 repetitions. Other jobs were running on the machine (1-minute load
+average 10.7 before and 11.9 after the run), which shows in wall time: wall-time medians were up to
+about twice the CPU times and varied by up to 46% (coefficient of variation), while the CPU-time
+coefficient of variation stayed at or below 7.5% for every row. All inputs are synthetic.
 
 | Benchmark | `HashPrefixCache` | `RadixPrefixCache` |
 |---|--:|--:|
-| Match a cached 256-token prefix (full hit) | 568 ns | 129 ns |
-| Match a cached 2,048-token prefix | 4,411 ns | 598 ns |
-| Match a cached 16,384-token prefix | 37,161 ns | 4,404 ns |
-| Match one of 1,024 prompts sharing a 1,024-token prefix | 2,628 ns | 468 ns |
-| Fork a cached 512-token prefix, append 256 tokens, insert, evict them | 2,440 ns | 833 ns |
-| The same with 2,048 appended tokens | 12,602 ns | 2,182 ns |
-| Simulate 200 synthetic few-shot requests (2,048 blocks) | 8.79 ms | 6.27 ms |
+| Match a cached 256-token prefix (full hit) | 566 ns | 134 ns |
+| Match a cached 2,048-token prefix | 4,350 ns | 622 ns |
+| Match a cached 16,384-token prefix | 37,559 ns | 5,014 ns |
+| Match one of 1,024 prompts sharing a 1,024-token prefix | 2,930 ns | 557 ns |
+| Fork a cached 512-token prefix, append 256 tokens, insert, evict them | 2,589 ns | 915 ns |
+| The same with 2,048 appended tokens | 13,740 ns | 2,337 ns |
+| Simulate 200 synthetic few-shot requests (2,048 blocks) | 8.95 ms | 6.76 ms |
 
 | Benchmark | Median |
 |---|--:|
-| `BlockAllocator` allocate + release | 4.76 ns |
-| `Sequence::append` of one token (decode step) | 10.4 ns |
-| `fork()` of a 1,000-token sequence + copy-on-write append | 453 ns |
-| Simulate the same 200 requests without prefix caching | 4.80 ms |
+| `BlockAllocator` allocate + release | 4.37 ns |
+| `Sequence::append` of one token (decode step) | 10.9 ns |
+| `fork()` of a 1,000-token sequence + copy-on-write append | 430 ns |
+| Simulate the same 200 requests without prefix caching | 4.69 ms |
 
 The radix tree's lookups are faster because they compare token ids along a few edges, while the
 hash cache computes one chained hash and one hash-map lookup per block of the query.
 
 ## Testing
 
-- `ctest --preset dev` runs 130 tests: 124 GoogleTest cases plus CLI and example smoke tests.
-  `pytest` runs 32 Python tests (Python 3.14.5, pytest 9.1.1).
+- `ctest --preset dev` runs 144 tests: 128 GoogleTest cases of the main suite, 5 fault-injection
+  cases, 7 command-line checks, a replay of the fuzz harness, the package consumer and 2 example
+  runs (the release preset adds a benchmark smoke run: 145). `pytest` runs 36 Python tests
+  (Python 3.14.5, pytest 9.1.1).
 - Randomized invariant tests (fixed seeds, 8 configurations including tiny pools and a deliberately
   colliding hasher) check after every operation that reference counts equal the holders, that
   locked nodes are never evicted, that matched blocks hold the queried tokens, that no holder sees a
   block change underneath it, that the tree is structurally valid after every split, insert and
   eviction, and that every block is free once all sequences end. Differential tests check that
   both caches return the same hits as a naive reference model.
-- `cmake --workflow --preset asan-ubsan` and `--preset tsan` pass (Apple Clang 21.0.0, macOS 26,
+- Allocation failures: `radix_kv_fault_tests` replaces the global `operator new`, fails each
+  allocation of `insert`, `match_prefix`, `fork`, `assign_prefix` and `append` in turn and checks
+  after every `std::bad_alloc` that the cache, the sequence and the pool are unchanged. It is not
+  built under sanitizers, whose allocators the replacement would bypass.
+- `cmake --workflow --preset asan-ubsan` and `--preset tsan` pass, 139 tests each, and
+  `--preset cxx23` (where `Result` is `std::expected`) passes 144 (Apple Clang 21.0.0, macOS 26,
   Apple M1 Pro). The ThreadSanitizer run includes a test that runs independent simulations in
   parallel threads; pytest does the same through the bindings, with the GIL released.
-- libFuzzer, same driver: `fuzz_prefix_cache -max_total_time=120 -max_len=4096` ran 215,968
-  inputs in 121 s without a failure (Homebrew clang 23.1.3, AddressSanitizer and UBSan enabled,
-  Apple M1 Pro under load).
-- `./scripts/coverage.sh`: 92.9% of lines, 91.1% of regions and 84.1% of branches of `src/` and
-  `include/` are covered by the C++ suite (Apple Clang 21.0.0 source-based coverage).
-- `./scripts/lint.sh` runs clang-format and clang-tidy (strict configuration, warnings as errors)
-  over every C++ file; ruff and `mypy --strict` check the Python code.
+- libFuzzer, same driver: `fuzz_prefix_cache -max_total_time=120 -max_len=4096` ran 318,627 inputs
+  in 121 s without a failure (Homebrew clang 23.1.3, AddressSanitizer, UBSan set to abort on the
+  first report, library asserts on; Apple M1 Pro, load average 9 to 17).
+- `./scripts/coverage.sh`: 93.5% of lines, 91.1% of regions and 84.4% of branches of `src/` and
+  `include/` are covered by the C++ test suite (Apple Clang 21.0.0 source-based coverage).
+- `./scripts/lint.sh` runs clang-format over every C++ file and clang-tidy (strict configuration,
+  warnings as errors) over every translation unit of the build: library, tests (including the fuzz
+  harness, through its replay driver, and the package consumer), tools, examples, benchmarks and
+  bindings. It is clean with the pinned clang-format 23.1.3 and clang-tidy 22.1.8. ruff and
+  `mypy --strict` check the Python code.
+- Homebrew GCC 14.2 compiles every translation unit of the library, tests, tools and examples with
+  the project's warning set and `-Werror`, as C++20 and as C++23, and both GCC-built simulators
+  reproduce the few-shot rows at 1024 blocks exactly. GoogleTest itself does not build with this
+  GCC against the macOS 26 SDK, so running the suite under GCC is left to the Linux CI jobs.
 
 ## Limitations
 
@@ -354,12 +407,20 @@ hash cache computes one chained hash and one hash-map lookup per block of the qu
 - Each cache keeps a token store of `num_blocks * block_size * 4` bytes.
 - The Python API copies token lists (no zero-copy NumPy input). No prebuilt wheels; Windows is not
   tested.
+- Preemption restarts a request instead of modelling vLLM's recompute preemption (see the design
+  notes), which slightly overstates decode work under memory pressure.
+- Block ids are plain integers: a cache can tell that a `Sequence` comes from another pool (and
+  rejects it), but not that a list of block ids does.
+- Everything above was verified on macOS only. The Linux jobs of the CI workflow (GCC 14, Clang 18,
+  the sanitizers, libFuzzer and the Python matrix on Ubuntu) had not run yet when these results
+  were recorded.
 
 ## Roadmap
 
 - Accept precomputed per-request block hashes in `HashPrefixCache`, as vLLM does.
 - Evict only the tail of a long radix leaf (split, then evict) as an option.
-- Simulator: a prefill/decode cost model, swap-based preemption, cache-aware scheduling (for
+- Simulator: a prefill/decode cost model, vLLM-style recompute preemption (keep the generated
+  tokens and cache the victim's full blocks) and swap-based preemption, cache-aware scheduling (for
   example longest prefix first), and a trace file format for replaying real tokenized logs.
 - Zero-copy NumPy inputs and published wheels.
 
