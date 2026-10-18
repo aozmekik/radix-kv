@@ -46,6 +46,12 @@ Options:
   --format FORMAT      markdown or csv                               (default: markdown)
   --version            print the version and exit
   --help               print this help and exit
+
+Requests larger than the whole pool are rejected (with the later turns of their session) and
+reported in the "rejected" column; hit rates cover the completed requests only.
+
+Exit status: 0 on success, 1 if a simulation failed its consistency checks or completed no
+request, 2 for invalid options.
 )";
 
 struct Options {
@@ -86,17 +92,17 @@ std::uint32_t parse_positive(std::string_view text, std::string_view flag) {
   return value;
 }
 
+// Parses "N[,N...]"; an empty element (as in "1024," or ",") is an error.
 std::vector<std::uint32_t> parse_list(std::string_view text, std::string_view flag) {
   std::vector<std::uint32_t> values;
-  while (!text.empty()) {
+  for (;;) {
     const std::size_t comma = text.find(',');
     values.push_back(parse_positive(text.substr(0, comma), flag));
-    text = comma == std::string_view::npos ? std::string_view{} : text.substr(comma + 1);
+    if (comma == std::string_view::npos) {
+      return values;
+    }
+    text.remove_prefix(comma + 1);
   }
-  if (values.empty()) {
-    throw UsageError(std::string(flag) + ": expected at least one value");
-  }
-  return values;
 }
 
 std::vector<Strategy> parse_strategies(std::string_view name) {
@@ -200,43 +206,47 @@ std::string format_rate(double per_second) {
 
 void print_header(bool csv) {
   if (csv) {
-    std::cout << "workload,strategy,blocks,requests,hit_rate,prompt_tokens,cached_tokens,"
+    std::cout << "workload,strategy,blocks,completed,rejected,hit_rate,prompt_tokens,cached_tokens,"
                  "recompute_prompt_tokens,recompute_cached_tokens,evicted_blocks,preemptions,"
-                 "peak_blocks_used,peak_blocks_active,cow_copies,cache_ops,cache_ops_per_s,"
-                 "wall_ms,consistent\n";
+                 "peak_blocks_used,peak_blocks_active,cow_copies,cache_ops,cache_ms,"
+                 "cache_ops_per_s,wall_ms,consistent\n";
     return;
   }
-  std::cout << "| workload | strategy | blocks | hit rate | evicted blocks | preemptions | "
-               "peak used | peak active | cache ops/s | wall ms |\n"
-               "|---|---|--:|--:|--:|--:|--:|--:|--:|--:|\n";
+  std::cout
+      << "| workload | strategy | blocks | rejected | hit rate | evicted blocks | preemptions | "
+         "peak used | peak active | cache ms | cache ops/s | wall ms |\n"
+         "|---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|\n";
 }
 
 void print_row(bool csv, std::string_view workload, std::uint32_t blocks,
                const SimulationReport& report) {
   using std::chrono::duration;
   const double wall_ms = duration<double, std::milli>(report.wall_time).count();
+  const double cache_ms = duration<double, std::milli>(report.cache_time).count();
   const std::string_view strategy = radix_kv::to_string(report.strategy);
   if (csv) {
     std::cout << workload << ',' << strategy << ',' << blocks << ',' << report.requests_completed
-              << ',' << fixed(report.hit_rate(), 6) << ',' << report.prompt_tokens << ','
-              << report.cached_tokens << ',' << report.recompute_prompt_tokens << ','
-              << report.recompute_cached_tokens << ',' << report.evicted_blocks << ','
-              << report.preemptions << ',' << report.peak_blocks_used << ','
-              << report.peak_blocks_active << ',' << report.cow_copies << ',' << report.cache_ops
-              << ',' << fixed(report.cache_ops_per_second(), 0) << ',' << fixed(wall_ms, 3) << ','
+              << ',' << report.requests_rejected << ',' << fixed(report.hit_rate(), 6) << ','
+              << report.prompt_tokens << ',' << report.cached_tokens << ','
+              << report.recompute_prompt_tokens << ',' << report.recompute_cached_tokens << ','
+              << report.evicted_blocks << ',' << report.preemptions << ','
+              << report.peak_blocks_used << ',' << report.peak_blocks_active << ','
+              << report.cow_copies << ',' << report.cache_ops << ',' << fixed(cache_ms, 3) << ','
+              << fixed(report.cache_ops_per_second(), 0) << ',' << fixed(wall_ms, 3) << ','
               << (report.consistent ? "true" : "false") << '\n';
     return;
   }
   std::cout << "| " << workload << " | " << strategy << " | " << blocks << " | "
-            << fixed(100.0 * report.hit_rate(), 1) << "% | " << report.evicted_blocks << " | "
-            << report.preemptions << " | " << report.peak_blocks_used << " | "
-            << report.peak_blocks_active << " | " << format_rate(report.cache_ops_per_second())
-            << " | " << fixed(wall_ms, 1) << " |\n";
+            << report.requests_rejected << " | " << fixed(100.0 * report.hit_rate(), 1) << "% | "
+            << report.evicted_blocks << " | " << report.preemptions << " | "
+            << report.peak_blocks_used << " | " << report.peak_blocks_active << " | "
+            << fixed(cache_ms, 1) << " | " << format_rate(report.cache_ops_per_second()) << " | "
+            << fixed(wall_ms, 1) << " |\n";
 }
 
 int run(const Options& options) {
   print_header(options.csv);
-  bool all_consistent = true;
+  bool ok = true;
   for (const std::string& name : options.workloads) {
     const radix_kv::Trace trace =
         radix_kv::generate_trace(make_workload(name, options.requests), options.seed);
@@ -246,15 +256,25 @@ int run(const Options& options) {
       for (const Strategy strategy : options.strategies) {
         const SimulationReport report = radix_kv::simulate(trace, strategy, config);
         print_row(options.csv, name, blocks, report);
+        const std::string where = name + " / " + std::string(radix_kv::to_string(strategy)) +
+                                  " / " + std::to_string(blocks) + " blocks: ";
         if (!report.consistent) {
-          std::cerr << "error: " << name << " / " << radix_kv::to_string(strategy) << ": "
-                    << report.inconsistency << '\n';
-          all_consistent = false;
+          std::cerr << "error: " << where << report.inconsistency << '\n';
+          ok = false;
         }
+        if (report.requests_completed == 0) {
+          std::cerr << "error: " << where << "every request was rejected (larger than the pool)\n";
+        } else if (report.requests_rejected > 0) {
+          std::cerr << "warning: " << where << report.requests_rejected << " of "
+                    << trace.requests.size()
+                    << " requests rejected (larger than the pool); the hit rate covers the "
+                    << report.requests_completed << " completed requests only\n";
+        }
+        ok = ok && report.requests_completed > 0;
       }
     }
   }
-  return all_consistent ? 0 : 1;
+  return ok ? 0 : 1;
 }
 
 }  // namespace

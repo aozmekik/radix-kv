@@ -21,4 +21,13 @@ if(RADIX_KV_BUILD_TESTS)
   set_tests_properties(tool.radix_kv_sim.help PROPERTIES PASS_REGULAR_EXPRESSION "Usage:")
   add_test(NAME tool.radix_kv_sim.rejects_bad_flags COMMAND radix_kv_sim --blocks 0)
   set_tests_properties(tool.radix_kv_sim.rejects_bad_flags PROPERTIES WILL_FAIL TRUE)
+  add_test(NAME tool.radix_kv_sim.rejects_empty_list_elements COMMAND radix_kv_sim --blocks 1024,)
+  set_tests_properties(tool.radix_kv_sim.rejects_empty_list_elements PROPERTIES WILL_FAIL TRUE)
+  # Every chat request carries a 1024-token system prompt, which does not fit 8 blocks.
+  set(too_small --workload chat --strategy hash --requests 3 --blocks 8 --format csv)
+  add_test(NAME tool.radix_kv_sim.reports_rejected_requests COMMAND radix_kv_sim ${too_small})
+  set_tests_properties(tool.radix_kv_sim.reports_rejected_requests
+                       PROPERTIES PASS_REGULAR_EXPRESSION "chat,hash,8,0,[1-9][0-9]*,")
+  add_test(NAME tool.radix_kv_sim.fails_when_nothing_completes COMMAND radix_kv_sim ${too_small})
+  set_tests_properties(tool.radix_kv_sim.fails_when_nothing_completes PROPERTIES WILL_FAIL TRUE)
 endif()
