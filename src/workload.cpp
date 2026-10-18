@@ -1,5 +1,6 @@
 #include "radix_kv/workload.hpp"
 
+#include <algorithm>
 #include <array>
 #include <bit>
 #include <cmath>
@@ -149,6 +150,16 @@ std::uint32_t draw_weighted(std::span<const double> weights, double total, Rng& 
   return 0;
 }
 
+/// Lowest index not in `taken`. Pool documents are ordered by decreasing popularity, so this is the
+/// most popular document not drawn yet.
+std::uint32_t first_not_taken(std::span<const std::uint32_t> taken) noexcept {
+  std::uint32_t candidate = 0;
+  while (std::ranges::find(taken, candidate) != taken.end()) {
+    ++candidate;
+  }
+  return candidate;
+}
+
 std::uint32_t checked_length(std::size_t length) {
   if (length > std::numeric_limits<std::uint32_t>::max()) {
     throw std::length_error("generate_trace: a session exceeds 2^32 - 1 tokens");
@@ -229,13 +240,21 @@ void generate(const RagWorkload& workload, Trace& trace, Rng& rng) {
   }
   const std::vector<double> popularity = zipf_weights(workload.documents, workload.document_zipf);
   std::vector<double> remaining;
+  std::vector<std::uint32_t> picked;
+  picked.reserve(workload.documents_per_query);
   for (std::uint32_t r = 0; r < workload.requests; ++r) {
     std::vector<TokenId> stream = system;
     // Weighted sampling without replacement; the draw order is the retrieval order.
     remaining = popularity;
+    picked.clear();
     for (std::uint32_t k = 0; k < workload.documents_per_query; ++k) {
-      const std::uint32_t pick = draw_weighted(remaining, sum(remaining), rng);
+      // With a very large exponent the weights of all remaining documents can underflow to zero;
+      // the distribution's limit then takes the most popular document not drawn yet.
+      const double total = sum(remaining);
+      const std::uint32_t pick =
+          total > 0.0 ? draw_weighted(remaining, total, rng) : first_not_taken(picked);
       remaining[pick] = 0.0;
+      picked.push_back(pick);
       stream.insert(stream.end(), documents[pick].begin(), documents[pick].end());
     }
     append_random(stream, sample(workload.query_tokens, rng), trace.vocab_size, rng);

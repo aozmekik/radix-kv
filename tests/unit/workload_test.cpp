@@ -150,6 +150,31 @@ TEST(GenerateTrace, RagPromptsShareTheSystemPromptAndPoolDocuments) {
   }
 }
 
+TEST(GenerateTrace, RagDocumentsStayDistinctWhenZipfWeightsUnderflow) {
+  // 1 / rank^2000 is 0.0 in double precision for every rank above 1.
+  const RagWorkload rag{.requests = 5,
+                        .system_prompt_tokens = 0,
+                        .documents = 5,
+                        .document_tokens = LengthDistribution::fixed(4),
+                        .documents_per_query = 3,
+                        .document_zipf = 2000.0,
+                        .query_tokens = LengthDistribution::fixed(1),
+                        .output_tokens = LengthDistribution::fixed(1)};
+  const Trace trace = generate_trace(rag, 7);
+  const std::span<const TokenId> first = trace.prompt(trace.requests.front()).first(12);
+  for (const TraceRequest& request : trace.requests) {
+    std::vector<std::vector<TokenId>> chunks;
+    for (std::size_t d = 0; d < 3; ++d) {
+      const auto chunk = trace.prompt(request).subspan(d * 4, 4);
+      chunks.emplace_back(chunk.begin(), chunk.end());
+    }
+    std::ranges::sort(chunks);
+    EXPECT_EQ(std::ranges::adjacent_find(chunks), chunks.end());
+    // In the limit the three most popular documents are always retrieved, in popularity order.
+    EXPECT_TRUE(starts_with(trace.prompt(request), first));
+  }
+}
+
 TEST(GenerateTrace, RandomPromptsRespectBoundsAndVocabulary) {
   const RandomWorkload random{.requests = 200,
                               .prompt_tokens = LengthDistribution::uniform(3, 9),
