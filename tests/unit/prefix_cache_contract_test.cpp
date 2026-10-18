@@ -59,6 +59,7 @@ using CacheTypes = ::testing::Types<HashPrefixCache, RadixPrefixCache>;
 TYPED_TEST_SUITE(PrefixCacheContract, CacheTypes);
 
 TYPED_TEST(PrefixCacheContract, EmptyCacheMissesAtTheRoot) {
+  EXPECT_EQ(&this->cache.allocator(), &this->allocator);
   const PrefixMatch match = this->match({1, 2, 3, 4});
   EXPECT_EQ(match.num_tokens, 0U);
   EXPECT_TRUE(match.blocks.empty());

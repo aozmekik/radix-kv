@@ -19,6 +19,7 @@ static_assert(PrefixCache<NullPrefixCache>);
 TEST(NullPrefixCache, NeverCachesAnything) {
   BlockAllocator allocator(8, 2);
   NullPrefixCache cache(allocator);
+  EXPECT_EQ(&cache.allocator(), &allocator);
   Sequence sequence(allocator);
   ASSERT_TRUE(sequence.append(std::vector<TokenId>{1, 2, 3, 4}));
   const Result<InsertResult> inserted = cache.insert(sequence.tokens(), sequence.block_table());

@@ -111,14 +111,21 @@ void bind_cache(nb::module_& m, const char* name, const char* doc) {
           },
           "tokens"_a, "blocks"_a,
           "Caches the full blocks of (tokens, blocks), taking a reference to each newly cached "
-          "block. Raises ValueError for invalid block ids.")
+          "block. The blocks must belong to this cache's allocator. Raises ValueError for invalid "
+          "block ids.")
       .def(
           "insert",
           [](Cache& cache, const PySequence& sequence) {
+            if (&sequence.sequence.allocator() != &cache.allocator()) {
+              throw nb::value_error(
+                  "the sequence draws from a different BlockAllocator than this cache");
+            }
             return unwrap(
                 cache.insert(sequence.sequence.tokens(), sequence.sequence.block_table()));
           },
-          "sequence"_a, "Caches the full blocks of a sequence.")
+          "sequence"_a,
+          "Caches the full blocks of a sequence. Raises ValueError if the sequence uses another "
+          "allocator.")
       .def(
           "lock", [](Cache& cache, NodeHandle node) { unwrap(cache.lock(node)); }, "node"_a,
           "Pins the path from the root to node against eviction.")
@@ -133,6 +140,8 @@ void bind_cache(nb::module_& m, const char* name, const char* doc) {
       .def("holds_block", &Cache::holds_block, "block"_a,
            "True when the cache holds a reference to block.")
       .def_prop_ro("stats", &Cache::stats, "Current counters.")
+      .def_prop_ro("allocator", &Cache::allocator, nb::rv_policy::reference_internal,
+                   "The allocator this cache was created over.")
       .def("check_invariants", &Cache::check_invariants,
            "Full structural check; returns a description of the first violation, or None.");
 }
@@ -236,7 +245,9 @@ void bind_core(nb::module_& m) {
              const std::vector<BlockId>& blocks) {
             unwrap(self.sequence.assign_prefix(tokens, blocks));
           },
-          "tokens"_a, "blocks"_a, "Seeds an empty sequence with full cached blocks.")
+          "tokens"_a, "blocks"_a,
+          "Seeds an empty sequence with full cached blocks, which must belong to this sequence's "
+          "allocator (a PrefixMatch of a cache over the same pool).")
       .def_prop_ro(
           "tokens", [](const PySequence& self) { return to_vector(self.sequence.tokens()); },
           "Copy of the token ids.")

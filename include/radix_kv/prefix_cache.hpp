@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "radix_kv/block_allocator.hpp"
 #include "radix_kv/result.hpp"
 #include "radix_kv/types.hpp"
 
@@ -68,8 +69,9 @@ using BlockHasher = std::uint64_t (*)(std::uint64_t seed, std::span<const TokenI
 /// - `lock(node)` pins the path from the root to `node`; locked blocks are never evicted.
 ///   `unlock(node)` undoes exactly one `lock(node)` taken through the same handle.
 /// - `evict(n)` releases least-recently-used unlocked leaves until at least `n` blocks were
-/// released
-///   or nothing evictable is left, and returns the number released.
+///   released or nothing evictable is left, and returns the number released.
+/// - `allocator()` is the pool the cache was created over. Block ids passed to `insert` must be
+///   blocks of that pool: an id is only checked against the pool, not against who allocated it.
 template <class Cache>
 concept PrefixCache =
     requires(Cache& cache, const Cache& view, std::span<const TokenId> tokens,
@@ -84,6 +86,7 @@ concept PrefixCache =
       { view.holds_block(block) } -> std::same_as<bool>;
       { view.stats() } -> std::same_as<CacheStats>;
       { view.check_invariants() } -> std::same_as<std::optional<std::string>>;
+      { view.allocator() } -> std::same_as<BlockAllocator&>;
     };
 
 }  // namespace radix_kv

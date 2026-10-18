@@ -78,6 +78,23 @@ def test_stale_handles_are_rejected(cache_type: CacheType) -> None:
     assert hash(cache.root) == hash(cache.root)
 
 
+@pytest.mark.parametrize("cache_type", CACHES)
+def test_insert_rejects_a_sequence_of_another_allocator(cache_type: CacheType) -> None:
+    pool = rk.BlockAllocator(8, 2)
+    other = rk.BlockAllocator(8, 2)
+    cache = cache_type(pool)
+    assert cache.allocator is pool
+    owner = rk.Sequence(pool)
+    owner.extend([9, 9, 9, 9])  # holds blocks 0 and 1 of pool
+    stranger = rk.Sequence(other)
+    stranger.extend([1, 2, 3, 4])  # holds blocks 0 and 1 of the other pool
+    with pytest.raises(ValueError, match="different BlockAllocator"):
+        cache.insert(stranger)
+    assert cache.stats.cached_blocks == 0
+    assert pool.ref_count(0) == pool.ref_count(1) == 1
+    assert cache.match_prefix([1, 2, 3, 4]).num_tokens == 0
+
+
 def test_strategies_agree_on_block_aligned_prefixes() -> None:
     prompts = [[1, 2, 3, 4, 5, 6], [1, 2, 3, 4, 7, 8], [1, 2, 9, 9], [5, 5, 5]]
     lengths: dict[str, list[int]] = {}

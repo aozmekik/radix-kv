@@ -5,8 +5,7 @@
 // It interprets a byte string as a sequence of scheduler-like operations on one allocator, one
 // prefix cache and a handful of sequences, and checks after every operation that:
 //   - every allocator reference count equals the number of holders (sequences + cache) of the
-//   block,
-//     and the free count matches;
+//     block, and the free count matches;
 //   - the cache's structural invariants hold (check_invariants());
 //   - every lock still held refers to a live node (locked nodes are never evicted);
 //   - matched blocks hold exactly the queried tokens, and no holder ever sees a block's tokens
@@ -121,6 +120,7 @@ class NaivePrefixCache {
   }
   [[nodiscard]] std::optional<std::string> check_invariants() const { return std::nullopt; }
   // NOLINTEND(readability-convert-member-functions-to-static)
+  [[nodiscard]] BlockAllocator& allocator() const noexcept { return *allocator_; }
 
  private:
   BlockAllocator* allocator_;

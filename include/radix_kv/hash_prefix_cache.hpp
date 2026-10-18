@@ -87,6 +87,9 @@ class HashPrefixCache {
   /// Current counters.
   [[nodiscard]] CacheStats stats() const noexcept;
 
+  /// The pool this cache was created over; `insert` expects block ids of this pool.
+  [[nodiscard]] BlockAllocator& allocator() const noexcept { return *allocator_; }
+
   /// Full structural check (O(cached blocks)); returns a description of the first violated
   /// invariant, or `std::nullopt`. Intended for tests and debugging.
   [[nodiscard]] std::optional<std::string> check_invariants() const;

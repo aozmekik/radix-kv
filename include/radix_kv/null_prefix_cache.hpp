@@ -24,8 +24,7 @@ namespace radix_kv {
 class NullPrefixCache {
  public:
   /// Creates the cache; `allocator` only provides the block size for argument checks.
-  explicit NullPrefixCache(BlockAllocator& allocator) noexcept
-      : block_size_(allocator.block_size()) {}
+  explicit NullPrefixCache(BlockAllocator& allocator) noexcept : allocator_(&allocator) {}
 
   // The members below ignore the cache state but stay non-static to match the PrefixCache
   // interface of the real caches.
@@ -40,7 +39,7 @@ class NullPrefixCache {
   /// full blocks in `tokens`.
   [[nodiscard]] Result<InsertResult> insert(std::span<const TokenId> tokens,
                                             std::span<const BlockId> blocks) const noexcept {
-    if (blocks.size() < tokens.size() / block_size_) {
+    if (blocks.size() < tokens.size() / allocator_->block_size()) {
       return fail(Errc::invalid_argument);
     }
     return InsertResult{};
@@ -90,8 +89,11 @@ class NullPrefixCache {
 
   // NOLINTEND(readability-convert-member-functions-to-static)
 
+  /// The pool this cache was created over.
+  [[nodiscard]] BlockAllocator& allocator() const noexcept { return *allocator_; }
+
  private:
-  std::uint32_t block_size_;
+  BlockAllocator* allocator_;
   std::uint32_t locks_ = 0;
 };
 
