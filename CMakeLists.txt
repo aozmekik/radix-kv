@@ -119,4 +119,5 @@ if(RADIX_KV_INSTALL)
   install(FILES ${PROJECT_BINARY_DIR}/radix_kvConfig.cmake
                 ${PROJECT_BINARY_DIR}/radix_kvConfigVersion.cmake
           DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/radix_kv)
+  install(FILES LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/radix_kv)
 endif()

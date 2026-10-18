@@ -52,7 +52,8 @@ minimum-version = "build-system.requires"
 cmake.version = ">=3.25"
 build-dir = "build/python/{wheel_tag}"
 wheel.packages = ["python/radix_kv"]
-sdist.exclude = [".github", "build", "bench", "fuzz", "docs"]
+# bench/ and fuzz/ stay in: the CMake presets that build the C++ project from an sdist use them.
+sdist.exclude = [".github", "build", "docs"]
 
 [tool.scikit-build.cmake.define]
 RADIX_KV_BUILD_PYTHON = "ON"
