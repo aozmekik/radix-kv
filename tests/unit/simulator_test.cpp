@@ -10,6 +10,7 @@
 
 #include <gtest/gtest.h>
 
+#include "radix_kv/types.hpp"
 #include "radix_kv/workload.hpp"
 
 namespace radix_kv {

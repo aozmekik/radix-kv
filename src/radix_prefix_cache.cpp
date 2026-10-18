@@ -301,6 +301,7 @@ std::uint32_t RadixPrefixCache::split(std::uint32_t node, std::size_t prefix_blo
   return upper;
 }
 
+// NOLINTNEXTLINE(bugprone-exception-escape): the insert() below cannot reallocate (see there).
 void RadixPrefixCache::unsplit(std::uint32_t upper) noexcept {
   Node& top = nodes_[upper];
   assert(top.children.size() == 1 && top.direct_locks == 0);

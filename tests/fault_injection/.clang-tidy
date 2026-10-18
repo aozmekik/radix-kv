@@ -1,0 +1,7 @@
+---
+InheritParentConfig: true
+# The replacement operator new/delete cannot reuse the reserved parameter names (__sz, __p) of the
+# standard library's declarations.
+Checks: >
+  -readability-inconsistent-declaration-parameter-name
+...

@@ -52,19 +52,31 @@ std::size_t fail_each_allocation(const Operation& operation, const Check& expect
   }
 }
 
+std::vector<std::uint32_t> ref_counts(const BlockAllocator& allocator) {
+  std::vector<std::uint32_t> counts(allocator.num_blocks());
+  for (BlockId block = 0; block < allocator.num_blocks(); ++block) {
+    counts[block] = allocator.ref_count(block);
+  }
+  return counts;
+}
+
+template <class Cache>
+std::vector<bool> held_blocks(const Cache& cache, const BlockAllocator& allocator) {
+  std::vector<bool> held(allocator.num_blocks());
+  for (BlockId block = 0; block < allocator.num_blocks(); ++block) {
+    held[block] = cache.holds_block(block);
+  }
+  return held;
+}
+
 // Everything observable about a cache and its pool, except node handles: a failed attempt may
 // recycle node slots, so a later handle's generation can differ.
 template <class Cache>
 auto observe(const Cache& cache, const BlockAllocator& allocator) {
   const CacheStats stats = cache.stats();
-  std::vector<std::uint32_t> ref_counts;
-  std::vector<bool> held;
-  for (BlockId block = 0; block < allocator.num_blocks(); ++block) {
-    ref_counts.push_back(allocator.ref_count(block));
-    held.push_back(cache.holds_block(block));
-  }
   return std::tuple(stats.cached_blocks, stats.locked_blocks, stats.evictable_blocks, stats.nodes,
-                    stats.evicted_blocks, allocator.num_free(), ref_counts, held);
+                    stats.evicted_blocks, allocator.num_free(), ref_counts(allocator),
+                    held_blocks(cache, allocator));
 }
 
 std::vector<TokenId> tokens_of(std::initializer_list<TokenId> tokens) {
@@ -93,11 +105,7 @@ struct Scenario {
     std::vector<std::vector<bool>> steps;
     EXPECT_TRUE(cache.unlock(lock));
     while (cache.evict(1) > 0) {
-      std::vector<bool> held;
-      for (BlockId block = 0; block < allocator.num_blocks(); ++block) {
-        held.push_back(cache.holds_block(block));
-      }
-      steps.push_back(held);
+      steps.push_back(held_blocks(cache, allocator));
     }
     return steps;
   }
@@ -126,21 +134,20 @@ TYPED_TEST(AllocationFailure, InsertIsAllOrNothing) {
   const auto before = observe(tested.cache, tested.allocator);
   ASSERT_EQ(before, observe(reference.cache, reference.allocator));
 
-  std::optional<InsertResult> result;
+  std::size_t new_blocks = 0;
   const std::size_t allocations = fail_each_allocation(
       [&] {
         const Result<InsertResult> inserted =
             tested.cache.insert(diverging.tokens(), diverging.block_table());
         ASSERT_TRUE(inserted);
-        result = *inserted;
+        new_blocks = inserted->new_blocks;
       },
       [&] {
         EXPECT_EQ(observe(tested.cache, tested.allocator), before);
         EXPECT_EQ(tested.cache.check_invariants(), std::nullopt);
       });
   EXPECT_GT(allocations, 0U);
-  ASSERT_TRUE(result);
-  EXPECT_EQ(result->new_blocks, 3U);
+  EXPECT_EQ(new_blocks, 3U);
 
   ASSERT_TRUE(reference.cache.insert(same.tokens(), same.block_table()));
   EXPECT_EQ(observe(tested.cache, tested.allocator), observe(reference.cache, reference.allocator));
@@ -172,14 +179,10 @@ TEST(AllocationFailure, SequenceOperationsAreAllOrNothing) {
   Sequence sequence(allocator);
   ASSERT_TRUE(sequence.append(tokens_of({1, 2, 3, 4, 5, 6})));
   const auto state = [&] {
-    std::vector<std::uint32_t> ref_counts;
-    for (BlockId block = 0; block < allocator.num_blocks(); ++block) {
-      ref_counts.push_back(allocator.ref_count(block));
-    }
     return std::tuple(
         std::vector<TokenId>(sequence.tokens().begin(), sequence.tokens().end()),
         std::vector<BlockId>(sequence.block_table().begin(), sequence.block_table().end()),
-        ref_counts);
+        ref_counts(allocator));
   };
   const auto before = state();
   const auto expect_unchanged = [&] { EXPECT_EQ(state(), before); };
@@ -200,7 +203,7 @@ TEST(AllocationFailure, SequenceOperationsAreAllOrNothing) {
             0U);
 
   // append() across several blocks, into a partial last block shared with a fork (copy-on-write).
-  Result<Sequence> fork = sequence.fork();
+  const Result<Sequence> fork = sequence.fork();
   ASSERT_TRUE(fork);
   const auto shared = state();
   const std::vector<TokenId> more(20, 7);

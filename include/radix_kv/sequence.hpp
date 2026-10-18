@@ -105,6 +105,9 @@ class Sequence {
   [[nodiscard]] BlockAllocator& allocator() const noexcept { return *allocator_; }
 
  private:
+  // append() for input that does not view `tokens_`.
+  [[nodiscard]] Result<AppendResult> append_unaliased(std::span<const TokenId> tokens);
+
   BlockAllocator* allocator_;
   std::vector<TokenId> tokens_;
   std::vector<BlockId> blocks_;
