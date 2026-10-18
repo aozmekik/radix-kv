@@ -153,8 +153,11 @@ struct Trace {
 };
 
 /// Generates a deterministic trace: the same workload, seed and vocabulary size give the same
-/// trace on every platform (the generator uses its own PRNG and integer sampling, not the
-/// implementation-defined `<random>` distributions; log-normal lengths go through `<cmath>`).
+/// trace. The generator uses its own PRNG instead of the implementation-defined `<random>`
+/// distributions, so traces built only from fixed and uniform lengths with Zipf exponent 0 are
+/// identical on every platform. Log-normal lengths and Zipf popularity go through `<cmath>`
+/// (`exp`, `log`, `pow`), whose last-bit results can differ between C libraries, so such traces
+/// may differ slightly from one platform to another.
 /// @throws std::invalid_argument for an empty workload (zero sessions, requests, templates or
 ///         documents), `documents_per_query` outside `[1, documents]`, a negative or non-finite
 ///         Zipf exponent, or `vocab_size == 0`.
