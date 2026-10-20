@@ -54,7 +54,7 @@ Not yet published to PyPI. Install from GitHub (this compiles the C++ extension,
 compiler is needed; pip fetches CMake and Ninja if they are missing):
 
 ```sh
-pip install "git+https://github.com/aozmekik/radix-kv"
+pip install "git+https://github.com/aozmekik/radix-kv@v0.1.0"
 ```
 
 The CI workflow is configured to build and test the package on Python 3.11 to 3.14, on Linux and
